@@ -1,0 +1,66 @@
+version: '3.8'
+
+networks:
+  net:
+    driver: bridge
+
+volumes:
+  rabbitmq_data:
+
+services: 
+  postgresql:
+    image: postgres:16.3
+    hostname: postgresql
+    ports:
+      - 5432:5432
+    networks:
+      - net
+    volumes:
+      - ./data/postgresql:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ridehail_user
+      POSTGRES_PASSWORD: ridehail_pass
+      POSTGRES_DB: ridehail_db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ridehail_user -d ridehail_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    image: migrate/migrate
+    networks:
+      - net
+    volumes:
+      - ./migrations:/migrations
+    command:
+      [
+        "-path", "/migrations",
+        "-database", "postgres://ridehail_user:ridehail_pass@postgresql:5432/ridehail_db?sslmode=disable",
+        "up"
+      ]
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:management
+    container_name: rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"   # AMQP (default RabbitMQ port)
+      - "15672:15672" # Management UI
+    networks:
+      - net
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
