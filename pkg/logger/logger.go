@@ -4,11 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"runtime"
-	"strings"
 	"time"
-
-	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 )
 
 const (
@@ -19,17 +15,15 @@ const (
 )
 
 type Logger interface {
-	Debug(ctx context.Context, action, msg string, args ...any)
-	Info(ctx context.Context, action, msg string, args ...any)
-	Warn(ctx context.Context, action, msg string, args ...any)
-	Error(ctx context.Context, action, msg string, err error, args ...any)
+	Debug(ctx context.Context, msg string, args ...any)
+	Info(ctx context.Context, msg string, args ...any)
+	Warn(ctx context.Context, msg string, args ...any)
+	Error(ctx context.Context, msg string, err error, args ...any)
 	GetSlogLogger() *slog.Logger
 }
 
 type logger struct {
-	slog     *slog.Logger
-	service  string
-	hostname string
+	slog *slog.Logger
 }
 
 // Initialize logger with service name and log level
@@ -50,10 +44,10 @@ func InitLogger(serviceName, logLevel string) Logger {
 	case LevelError:
 		level.Set(slog.LevelError)
 	default:
-		level.Set(slog.LevelInfo)
+		level.Set(slog.LevelDebug)
 	}
 
-	// Custom handler to add request_id and rename message field
+	// Custom handler
 	handler := &contextHandler{
 		handler: slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 			Level: level,
@@ -70,6 +64,7 @@ func InitLogger(serviceName, logLevel string) Logger {
 				}
 				return a
 			},
+			AddSource: false,
 		}),
 	}
 
@@ -80,9 +75,7 @@ func InitLogger(serviceName, logLevel string) Logger {
 	)
 
 	return &logger{
-		slog:     base,
-		service:  serviceName,
-		hostname: hostname,
+		slog: base,
 	}
 }
 
@@ -96,14 +89,19 @@ func (h *contextHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
 }
 
 func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
-	// Check if context have "request_id"
-	if reqID, ok := ctx.Value(types.GetRequestIDKey()).(string); ok && reqID != "" {
-		r.AddAttrs(slog.String("request_id", reqID))
-	}
-
-	// Check if context have "ride_id"
-	if rideID, ok := ctx.Value(types.GetRideIDKey()).(string); ok && rideID != "" {
-		r.AddAttrs(slog.String("ride_id", rideID))
+	if c, ok := ctx.Value(logCtxKey).(LogCtx); ok {
+		if c.Action != "" {
+			r.AddAttrs(slog.String("action", c.Action))
+		}
+		if c.UserID != "" {
+			r.AddAttrs(slog.String("user_id", c.UserID))
+		}
+		if c.RequestID != "" {
+			r.AddAttrs(slog.String("request_id", c.RequestID))
+		}
+		if c.RideID != "" {
+			r.AddAttrs(slog.String("ride_id", c.RideID))
+		}
 	}
 
 	return h.handler.Handle(ctx, r)
@@ -118,24 +116,22 @@ func (h *contextHandler) WithGroup(name string) slog.Handler {
 }
 
 // Logger methods
-func (l *logger) Debug(ctx context.Context, action, msg string, args ...any) {
-	l.slog.DebugContext(ctx, msg, append(args, "action", action)...)
+func (l *logger) Debug(ctx context.Context, msg string, args ...any) {
+	l.slog.DebugContext(ctx, msg, args...)
 }
 
-func (l *logger) Info(ctx context.Context, action, msg string, args ...any) {
-	l.slog.InfoContext(ctx, msg, append(args, "action", action)...)
+func (l *logger) Info(ctx context.Context, msg string, args ...any) {
+	l.slog.InfoContext(ctx, msg, args...)
 }
 
-func (l *logger) Warn(ctx context.Context, action, msg string, args ...any) {
-	l.slog.WarnContext(ctx, msg, append(args, "action", action)...)
+func (l *logger) Warn(ctx context.Context, msg string, args ...any) {
+	l.slog.WarnContext(ctx, msg, args...)
 }
 
-func (l *logger) Error(ctx context.Context, action, msg string, err error, args ...any) {
+func (l *logger) Error(ctx context.Context, msg string, err error, args ...any) {
 	attrs := []any{
-		"action", action,
 		"error", slog.GroupValue(
 			slog.String("msg", err.Error()),
-			slog.String("stack", getStack()),
 		),
 	}
 	attrs = append(attrs, args...)
@@ -144,31 +140,6 @@ func (l *logger) Error(ctx context.Context, action, msg string, err error, args 
 
 func (l *logger) GetSlogLogger() *slog.Logger {
 	return l.slog
-}
-
-// getStack return stack info
-func getStack() string {
-	var stackBuf [4096]byte
-	n := runtime.Stack(stackBuf[:], false)
-	stack := string(stackBuf[:n])
-
-	lines := strings.SplitSeq(stack, "\n")
-	for line := range lines {
-		if strings.Contains(line, "\t") &&
-			!strings.Contains(line, "runtime/") &&
-			!strings.Contains(line, "pkg/logger") {
-			// Return just the first relevant file:line
-			if idx := strings.LastIndex(line, "/"); idx > 0 {
-				line = line[idx+1:]
-			}
-			line = strings.TrimSpace(strings.TrimPrefix(line, "\t"))
-			if colon := strings.Index(line, ":"); colon > 0 {
-				return line[:colon] + ":" + strings.Split(line[colon+1:], " ")[0]
-			}
-			return line
-		}
-	}
-	return ""
 }
 
 // ValidateLogLevel validates if the given string is valid logger level(DEBUG, INFO, WARN, ERROR).

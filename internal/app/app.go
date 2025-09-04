@@ -6,11 +6,15 @@ import (
 	"fmt"
 
 	"github.com/Temutjin2k/ride-hail-system/config"
+	"github.com/Temutjin2k/ride-hail-system/internal/app/microservices"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 )
 
-var ErrInvalidMode = errors.New("invalid mode")
+var (
+	ErrInvalidMode           = errors.New("invalid mode")
+	ErrServiceNotInitialized = errors.New("service not initialized")
+)
 
 type Service interface {
 	Start(ctx context.Context) error
@@ -39,32 +43,30 @@ func NewApplication(ctx context.Context, cfg config.Config, log logger.Logger) (
 	return app, nil
 }
 
-func (app *App) Run(ctx context.Context) error {
-	if app.service == nil {
-		if err := app.initService(ctx, app.mode); err != nil {
-			return err
-		}
+func (a *App) Run(ctx context.Context) error {
+	if a.service == nil {
+		return ErrServiceNotInitialized
 	}
 
-	if err := app.service.Start(ctx); err != nil {
+	if err := a.service.Start(ctx); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (app *App) initService(ctx context.Context, mode types.ServiceMode) error {
+func (a *App) initService(ctx context.Context, mode types.ServiceMode) error {
 	var (
 		service Service
 		err     error
 	)
 	switch mode {
 	case types.RideService:
-		app.log.Info(ctx, "", "started service")
+		service, err = microservices.NewRide(ctx, a.cfg, a.log)
 	case types.DriverAndLocationService:
-		app.log.Info(ctx, "", "started service")
+		service, err = microservices.NewDriver(ctx, a.cfg, a.log)
 	case types.AdminService:
-		app.log.Info(ctx, "", "started service")
+		service, err = microservices.NewAdmin(ctx, a.cfg, a.log)
 	default:
 		return ErrInvalidMode
 	}
@@ -76,7 +78,7 @@ func (app *App) initService(ctx context.Context, mode types.ServiceMode) error {
 		return fmt.Errorf("failed to initialize: %s", mode)
 	}
 
-	app.service = service
+	a.service = service
 
 	return nil
 }

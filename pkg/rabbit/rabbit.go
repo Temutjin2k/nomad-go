@@ -3,6 +3,7 @@ package rabbit
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
@@ -15,6 +16,7 @@ type RabbitMQ struct {
 	Channel   *amqp.Channel
 	closeChan chan *amqp.Error
 	isClosed  bool
+	mu        sync.Mutex
 
 	log logger.Logger
 }
@@ -70,15 +72,21 @@ func New(ctx context.Context, dsn string, log logger.Logger) (*RabbitMQ, error) 
 func (r *RabbitMQ) monitorConnection() {
 	closeErr := <-r.closeChan
 	r.isClosed = true
+
+	ctx := logger.WithAction(context.Background(), types.ActionRabbitConnectionClosed)
+
 	if closeErr != nil {
-		r.log.Error(context.Background(), types.ActionRabbitConnectionClosed, "RabbitMQ connection closed with error", closeErr)
+		r.log.Error(ctx, "RabbitMQ connection closed with error", closeErr)
 	} else {
-		r.log.Debug(context.Background(), types.ActionRabbitConnectionClosed, "RabbitMQ connection closed gracefully")
+		r.log.Debug(ctx, "RabbitMQ connection closed gracefully")
 	}
 }
 
 // IsConnectionClosed checks if the connection is closed
 func (r *RabbitMQ) IsConnectionClosed() bool {
+	if r.Conn == nil {
+		return true
+	}
 	return r.isClosed || r.Conn.IsClosed()
 }
 
@@ -87,54 +95,71 @@ func (r *RabbitMQ) Close(ctx context.Context) error {
 	return r.closeWithContext(ctx)
 }
 
-// closeWithContext - closes RabbitMQ connection using context for cancellation
+// closeWithContext - closes RabbitMQ channel and connection using context
 func (r *RabbitMQ) closeWithContext(ctx context.Context) error {
-	op := "rabbitMQ:CloseWithContext"
+	ctx = logger.WithAction(ctx, types.ActionRabbitConnectionClosing)
 
-	r.log.Debug(ctx, types.ActionRabbitConnectionClosing, "closing channel", "op", op)
+	r.log.Debug(ctx, "closing channel")
 
-	// If connection is already closed, don't try to close channel/connection
-	if r.IsConnectionClosed() {
+	// quick check under lock
+	r.mu.Lock()
+	if r.isClosed {
+		r.mu.Unlock()
 		return nil
 	}
+	// mark closed early to avoid races with concurrent Close calls
+	r.isClosed = true
+	ch := r.Channel
+	conn := r.Conn
+	// Clear references so other goroutines know it's closed
+	r.Channel = nil
+	r.Conn = nil
+	r.mu.Unlock()
 
-	// Close channel with context
-	done := make(chan error, 1)
-	go func() {
-		if r.Channel != nil {
-			done <- r.Channel.Close()
-		} else {
-			done <- nil
+	// Close channel first (if any)
+	if ch != nil {
+		if err := closeWithCtxFunc(ctx, ch.Close); err != nil {
+			// If context cancelled, log it; if Close itself failed, log and continue to try closing conn
+			if ctx.Err() != nil {
+				r.log.Debug(ctx, "context cancelled while closing channel")
+			} else {
+				r.log.Error(ctx, "error closing channel", err)
+			}
 		}
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			r.log.Error(ctx, types.ActionRabbitConnectionClosing, "error closing channel", err, "op", op)
-		}
-	case <-ctx.Done():
-		r.log.Debug(ctx, types.ActionRabbitConnectionClosed, "context cancelled, forcing channel close", "op", op)
 	}
 
-	r.log.Debug(ctx, types.ActionRabbitConnectionClosing, "closing RabbitMQ connection", "op", op)
+	r.log.Debug(ctx, "closing RabbitMQ connection")
 
-	go func() {
-		if r.Conn != nil {
-			done <- r.Conn.Close()
-		} else {
-			done <- nil
-		}
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
+	// Close connection
+	if conn != nil {
+		if err := closeWithCtxFunc(ctx, conn.Close); err != nil {
+			if ctx.Err() != nil {
+				r.log.Debug(ctx, "context cancelled while closing connection")
+				// prefer to return context error
+				return ctx.Err()
+			}
 			return fmt.Errorf("failed to close connection: %w", err)
 		}
-	case <-ctx.Done():
-		r.log.Debug(ctx, types.ActionRabbitConnectionClosed, "context cancelled, forcing connection close", "op", op)
 	}
 
+	ctx = logger.WithAction(ctx, types.ActionRabbitConnectionClosed)
+	r.log.Info(ctx, "rabbitMQ closed")
+
 	return nil
+}
+
+// helper to close a resource with context cancellation safely
+func closeWithCtxFunc(ctx context.Context, fn func() error) error {
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- fn()
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		// Return context error; goroutine can still write into the buffered channel and exit.
+		return ctx.Err()
+	}
 }

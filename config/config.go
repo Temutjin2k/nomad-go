@@ -21,7 +21,8 @@ var (
 
 // Config contains all configuration variables of the application
 type Config struct {
-	Mode      types.ServiceMode
+	Mode types.ServiceMode
+
 	Database  DatabaseConfig
 	RabbitMQ  RabbitMQConfig
 	WebSocket WebSocketConfig
@@ -79,9 +80,11 @@ func NewConfig(filepath string) (*Config, error) {
 }
 
 func parseFlags(cfg *Config) error {
-	if modeFlag == nil {
+	if modeFlag == nil || *modeFlag == "" {
 		return ErrModeNotProvided
 	}
+
+	cfg.Mode = types.ServiceMode(*modeFlag)
 
 	return nil
 }

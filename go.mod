@@ -1,6 +1,6 @@
 module github.com/Temutjin2k/ride-hail-system
 
-go 1.24.1
+go 1.25.1
 
 require github.com/jackc/pgx/v5 v5.7.5
 

@@ -6,7 +6,7 @@ import (
 )
 
 const HelpMessage = `
-  Help
+  Help Flag info
 `
 
 func PrintHelp() {

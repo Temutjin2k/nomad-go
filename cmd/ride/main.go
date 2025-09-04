@@ -27,7 +27,7 @@ func Run() {
 
 	cfg, err := config.NewConfig(*configPath)
 	if err != nil {
-		log.Error(ctx, "config_init", "failed to configure application", err)
+		log.Error(ctx, "failed to configure application", err)
 		config.PrintHelp()
 		return
 	}
@@ -42,13 +42,13 @@ func Run() {
 	// Creating application
 	app, err := app.NewApplication(ctx, *cfg, log)
 	if err != nil {
-		log.Error(ctx, "app_init", "failed to init application", err)
+		log.Error(ctx, "failed to init application", err)
 		os.Exit(1)
 	}
 
 	// Running the apllication
 	if err = app.Run(ctx); err != nil {
-		log.Error(ctx, "app_run", "failed to run application", err)
+		log.Error(ctx, "failed to run application", err)
 		os.Exit(1)
 	}
 }
