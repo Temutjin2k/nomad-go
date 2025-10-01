@@ -1,0 +1,37 @@
+{
+	"info": {
+		"_postman_id": "b86afdb5-e070-466a-bae0-1ede1b801355",
+		"name": "Ride Hail",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "39030219"
+	},
+	"item": [
+		{
+			"name": "Create Driver",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"id\":\"9db2580a-2175-4852-8278-d629171a9f3e\",\r\n    \"license_number\":\"AA3123123\",\r\n    \"name\":\"Bacoonti\",\r\n    \"vehicle\": {\r\n        \"color\": \"black\",\r\n        \"make\": \"Chevrolet\",\r\n        \"model\": \"Cobalt\",\r\n        \"plate\": \"340PQA01\",\r\n        \"year\": 2015\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:3001/drivers",
+					"host": [
+						"localhost"
+					],
+					"port": "3001",
+					"path": [
+						"drivers"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
