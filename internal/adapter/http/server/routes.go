@@ -37,12 +37,13 @@ func (a *API) setupRideRoutes() {
 
 // setupDriverAndLocationRoutes setups routes for driver and location service
 func (a *API) setupDriverAndLocationRoutes() {
-	a.mux.HandleFunc("POST /drivers/{driver_id}/online", nil)   // Driver goes online
-	a.mux.HandleFunc("POST /drivers/{driver_id}/offline", nil)  // Driver goes offline
-	a.mux.HandleFunc("POST /drivers/{driver_id}/location", nil) // Update driver location
-	a.mux.HandleFunc("POST /drivers/{driver_id}/start", nil)    // Start a ride
-	a.mux.HandleFunc("POST /drivers/{driver_id}/complete", nil) // Complete a ride
-	a.mux.HandleFunc("GET /ws/drivers/{driver_id}", nil)        // WebSocket connection for drivers
+	a.mux.HandleFunc("POST /drivers", a.routes.driver.Register)
+	a.mux.HandleFunc("POST /drivers/{driver_id}/online", func(w http.ResponseWriter, r *http.Request) {})   // Driver goes online
+	a.mux.HandleFunc("POST /drivers/{driver_id}/offline", func(w http.ResponseWriter, r *http.Request) {})  // Driver goes offline
+	a.mux.HandleFunc("POST /drivers/{driver_id}/location", func(w http.ResponseWriter, r *http.Request) {}) // Update driver location
+	a.mux.HandleFunc("POST /drivers/{driver_id}/start", func(w http.ResponseWriter, r *http.Request) {})    // Start a ride
+	a.mux.HandleFunc("POST /drivers/{driver_id}/complete", func(w http.ResponseWriter, r *http.Request) {}) // Complete a ride
+	a.mux.HandleFunc("GET /ws/drivers/{driver_id}", func(w http.ResponseWriter, r *http.Request) {})        // WebSocket connection for drivers
 }
 
 // HealthCheck - returns system information.

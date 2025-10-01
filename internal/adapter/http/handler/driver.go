@@ -1,13 +1,63 @@
 package handler
 
-import "github.com/Temutjin2k/ride-hail-system/pkg/logger"
+import (
+	"context"
+	"net/http"
+
+	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler/dto"
+	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
+	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
+	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
+)
 
 type Driver struct {
-	l logger.Logger
+	service DriverService
+	l       logger.Logger
 }
 
-func NewDriver(l logger.Logger) *Driver {
+type DriverService interface {
+	Register(ctx context.Context, newDriver *models.Driver) error
+}
+
+func NewDriver(service DriverService, l logger.Logger) *Driver {
 	return &Driver{
-		l: l,
+		service: service,
+		l:       l,
+	}
+}
+
+func (h *Driver) Register(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var RegisterReq dto.RegisterReq
+	if err := readJSON(w, r, &RegisterReq); err != nil {
+		h.l.Error(ctx, "Failed to read request JSON data", err)
+		errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	v := validator.New()
+	RegisterReq.Validate(v)
+	if !v.Valid() {
+		h.l.Warn(ctx, "Invalid request data")
+		failedValidationResponse(w, v.Errors)
+		return
+	}
+
+	driver := RegisterReq.ToModel()
+	if err := h.service.Register(ctx, driver); err != nil {
+		h.l.Error(ctx, "Failed to register a new driver", err)
+		errorResponse(w, GetCode(err), err.Error())
+		return
+	}
+
+	response := envelope{
+		"is_verified": driver.IsVerified,
+		"class":       driver.Vehicle.Type,
+	}
+
+	if err := writeJSON(w, http.StatusCreated, response, nil); err != nil {
+		h.l.Error(ctx, "failed to write response", err)
+		internalErrorResponse(w, err.Error())
 	}
 }
