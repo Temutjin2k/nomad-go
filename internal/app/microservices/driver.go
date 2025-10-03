@@ -31,7 +31,7 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 	driverRepo := repo.NewDriverRepo(postgresDB.Pool)
 	driverService := drivergo.New(driverRepo, log)
 
-	httpServer, err := server.New(cfg, driverService, log)
+	httpServer, err := server.New(cfg, driverService, nil, log)
 	if err != nil {
 		log.Error(ctx, "Failed to setup http server", err)
 		return nil, err

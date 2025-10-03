@@ -32,7 +32,7 @@ type handlers struct {
 	admin  *handler.Admin
 }
 
-func New(cfg config.Config, driverService handler.DriverService, logger logger.Logger) (*API, error) {
+func New(cfg config.Config, driverService handler.DriverService, adminService handler.AdminService, logger logger.Logger) (*API, error) {
 	var addr string
 	handlers := &handlers{}
 
@@ -45,7 +45,7 @@ func New(cfg config.Config, driverService handler.DriverService, logger logger.L
 		handlers.driver = handler.NewDriver(driverService, logger)
 	case types.AdminService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.AdminService)
-		handlers.admin = handler.NewAdmin(logger)
+		handlers.admin = handler.NewAdmin(adminService, logger)
 	default:
 		return nil, fmt.Errorf("invalid mode: %s", cfg.Mode)
 	}
