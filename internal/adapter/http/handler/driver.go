@@ -7,6 +7,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler/dto"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
+	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
 )
 
@@ -25,13 +26,13 @@ func NewDriver(service DriverService, l logger.Logger) *Driver {
 		l:       l,
 	}
 }
-
 func (h *Driver) Register(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	ctx = wrap.WithAction(ctx, "register_driver")
 
 	var RegisterReq dto.RegisterReq
 	if err := readJSON(w, r, &RegisterReq); err != nil {
-		h.l.Error(ctx, "Failed to read request JSON data", err)
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to read request JSON data", err)
 		errorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -39,14 +40,14 @@ func (h *Driver) Register(w http.ResponseWriter, r *http.Request) {
 	v := validator.New()
 	RegisterReq.Validate(v)
 	if !v.Valid() {
-		h.l.Warn(ctx, "Invalid request data")
+		h.l.Warn(ctx, "invalid request data")
 		failedValidationResponse(w, v.Errors)
 		return
 	}
 
 	driver := RegisterReq.ToModel()
 	if err := h.service.Register(ctx, driver); err != nil {
-		h.l.Error(ctx, "Failed to register a new driver", err)
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to register a new driver", err)
 		errorResponse(w, GetCode(err), err.Error())
 		return
 	}
@@ -57,7 +58,8 @@ func (h *Driver) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := writeJSON(w, http.StatusCreated, response, nil); err != nil {
-		h.l.Error(ctx, "failed to write response", err)
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write response", err)
 		internalErrorResponse(w, err.Error())
+		return
 	}
 }

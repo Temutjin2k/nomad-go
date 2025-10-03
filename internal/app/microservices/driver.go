@@ -12,6 +12,7 @@ import (
 	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver.go"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	"github.com/Temutjin2k/ride-hail-system/pkg/postgres"
+	"github.com/Temutjin2k/ride-hail-system/pkg/trm"
 )
 
 type DriverService struct {
@@ -28,8 +29,9 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 		return nil, err
 	}
 
+	trm := trm.New(postgresDB.Pool)
 	driverRepo := repo.NewDriverRepo(postgresDB.Pool)
-	driverService := drivergo.New(driverRepo, log)
+	driverService := drivergo.New(driverRepo, trm, log)
 
 	httpServer, err := server.New(cfg, driverService, log)
 	if err != nil {

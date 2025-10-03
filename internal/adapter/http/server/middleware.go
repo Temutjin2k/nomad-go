@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
+	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 )
 
 func (a *API) withMiddleware() http.Handler {
@@ -85,7 +85,7 @@ func (a *API) RequestIDMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", reqID)
 
 		// 4. Inject into context for our logger
-		ctx := logger.WithRequestID(r.Context(), reqID)
+		ctx := wrap.WithRequestID(r.Context(), reqID)
 
 		// 5. Call the next handler
 		next.ServeHTTP(w, r.WithContext(ctx))

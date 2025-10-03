@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 	"time"
+
+	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 )
 
 const (
@@ -89,7 +91,7 @@ func (h *contextHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
 }
 
 func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
-	if c, ok := ctx.Value(logCtxKey).(LogCtx); ok {
+	if c, ok := ctx.Value(wrap.LogCtxKey).(wrap.LogCtx); ok {
 		if c.Action != "" {
 			r.AddAttrs(slog.String("action", c.Action))
 		}

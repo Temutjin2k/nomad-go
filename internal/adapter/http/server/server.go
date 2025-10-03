@@ -11,6 +11,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
+	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 )
 
 const serverIPAddress = "%s:%s"
@@ -74,7 +75,7 @@ func New(cfg config.Config, driverService handler.DriverService, logger logger.L
 func (a *API) Stop(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	ctx = logger.WithAction(ctx, "http_server_stop")
+	ctx = wrap.WithAction(ctx, "http_server_stop")
 
 	a.log.Debug(ctx, "shutting down HTTP server...", "address", a.addr)
 	if err := a.server.Shutdown(ctx); err != nil {
@@ -87,7 +88,7 @@ func (a *API) Stop(ctx context.Context) error {
 
 func (a *API) Run(ctx context.Context, errCh chan<- error) {
 	go func() {
-		ctx = logger.WithAction(ctx, "http_server_start")
+		ctx = wrap.WithAction(ctx, "http_server_start")
 		a.log.Info(ctx, "started http server", "address", a.addr)
 		if err := http.ListenAndServe(a.addr, a.withMiddleware()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("failed to start HTTP server: %w", err)
