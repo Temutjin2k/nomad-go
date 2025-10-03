@@ -40,3 +40,6 @@ down:
 
 nuke:
 	docker-compose down -v
+
+driver:
+	go run main.go --mode=driver-service

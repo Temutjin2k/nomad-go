@@ -12,11 +12,11 @@ type PostgreDB struct {
 }
 
 type Config interface {
-	GetDsn() string
+	GetDSN() string
 }
 
 func New(ctx context.Context, config Config) (*PostgreDB, error) {
-	dbConfig, err := pgxpool.ParseConfig(config.GetDsn())
+	dbConfig, err := pgxpool.ParseConfig(config.GetDSN())
 	if err != nil {
 		return nil, err
 	}

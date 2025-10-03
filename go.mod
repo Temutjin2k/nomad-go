@@ -2,7 +2,12 @@ module github.com/Temutjin2k/ride-hail-system
 
 go 1.25.1
 
-require github.com/jackc/pgx/v5 v5.7.5
+require github.com/jackc/pgx/v5 v5.7.6
+
+require (
+	github.com/jackc/pgx v3.6.2+incompatible // indirect
+	github.com/pkg/errors v0.9.1 // indirect
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect

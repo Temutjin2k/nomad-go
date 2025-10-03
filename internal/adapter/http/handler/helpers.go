@@ -8,6 +8,8 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+
+	t "github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 )
 
 type envelope map[string]any
@@ -89,4 +91,26 @@ func readJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	}
 
 	return nil
+}
+
+func GetCode(err error) int {
+	switch {
+	case IsOneOf(err, t.ErrInvalidLicenseFormat):
+		return http.StatusBadRequest
+	case IsOneOf(err, t.ErrUserNotFound):
+		return http.StatusNotFound
+	case IsOneOf(err, t.ErrLicenseAlreadyExists, t.ErrDriverRegistered):
+		return http.StatusConflict
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func IsOneOf(err error, targets ...error) bool {
+	for _, target := range targets {
+		if errors.Is(err, target) {
+			return true
+		}
+	}
+	return false
 }

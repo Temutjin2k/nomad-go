@@ -37,6 +37,17 @@ type DatabaseConfig struct {
 	Database string `env:"DATABASE_DATABASE" default:"ridehail_db"`
 }
 
+func (c DatabaseConfig) GetDSN() string {
+	return fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		c.User,
+		c.Password,
+		c.Host,
+		c.Port,
+		c.Database,
+	)
+}
+
 type RabbitMQConfig struct {
 	Host     string `env:"RABBITMQ_HOST" default:"localhost"`
 	Port     string `env:"RABBITMQ_PORT" default:"5672"`
