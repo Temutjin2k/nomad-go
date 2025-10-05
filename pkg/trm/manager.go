@@ -44,14 +44,14 @@ func (m *Manager) Do(ctx context.Context, fn func(ctx context.Context) error) er
 	if err := fn(ctx); err != nil {
 		// If error occurs, rollback the transaction
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-			return fmt.Errorf("failed to rollback tx: %v", rollbackErr)
+			return fmt.Errorf("failed to rollback tx: %w", rollbackErr)
 		}
-		return fmt.Errorf("failed to execute tx function: %v", err)
+		return fmt.Errorf("failed to execute tx function: %w", err)
 	}
 
 	// If no error, commit the transaction
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit tx: %v", err)
+		return fmt.Errorf("failed to commit tx: %w", err)
 	}
 
 	return nil
@@ -72,7 +72,7 @@ func (m *Manager) getTransactionFromContext(ctx context.Context) (pgx.Tx, contex
 	// If transaction does not exist, start a new one
 	tx, err := m.db.Begin(ctx)
 	if err != nil {
-		return nil, ctx, fmt.Errorf("failed to start new transaction: %v", err)
+		return nil, ctx, fmt.Errorf("failed to start new transaction: %w", err)
 	}
 
 	// Save the new transaction in the context
