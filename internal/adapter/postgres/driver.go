@@ -36,6 +36,7 @@ func (r *DriverRepo) Create(ctx context.Context, driver *models.Driver) error {
 		driver.IsVerified,
 		driver.Vehicle,
 	); err != nil {
+		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
 		return wrap.Error(ctx, fmt.Errorf("%s: %v", op, err))
 	}
 
@@ -79,4 +80,26 @@ func (r *DriverRepo) IsDriverExist(ctx context.Context, id uuid.UUID) (bool, err
 	}
 
 	return exist, nil
+}
+
+func (r *DriverRepo) ChangeStatus(ctx context.Context, driverID uuid.UUID, newStatus types.DriverStatus) (oldStatus types.DriverStatus, err error) {
+	const op = "DriverRepo.ChangeStatus"
+	query := `
+		WITH old AS (
+    		SELECT id, status
+    		FROM drivers
+    		WHERE id = $1
+		)
+		UPDATE drivers
+		SET status = $2
+		FROM old
+		WHERE drivers.id = old.id
+		RETURNING old.status;`
+
+	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, driverID, newStatus).Scan(&oldStatus); err != nil {
+		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
+		return "", wrap.Error(ctx, fmt.Errorf("%s: %v", op, err))
+	}
+
+	return oldStatus, nil
 }

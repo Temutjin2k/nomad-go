@@ -61,3 +61,18 @@ func (r *RegisterReq) ToModel() *models.Driver {
 		Vehicle:       r.Vehicle,
 	}
 }
+
+type LocationUpdateReq struct {
+	Latitude  *float64 `json:"latitude"`
+	Longitude *float64 `json:"longitude"`
+}
+
+func (r *LocationUpdateReq) Validate(v *validator.Validator) {
+	if r.Latitude != nil && r.Longitude != nil {
+		v.Check(*r.Latitude >= -90 && *r.Latitude <= 90, "latitude", "must be between -90 and 90")
+		v.Check(*r.Longitude >= -180 && *r.Latitude <= 180, "longitude", "must be between -90 and 90")
+	} else {
+		v.Check(r.Latitude != nil, "latitude", "must be provided")
+		v.Check(r.Longitude != nil, "longitude", "must be provided")
+	}
+}

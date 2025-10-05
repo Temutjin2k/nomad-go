@@ -6,4 +6,5 @@ const (
 	ActionRabbitConnectionClosing = "rabbitmq_connection_closing"
 
 	ActionDatabaseTransactionFailed = "database_transaction_failed"
+	ActionExternalServiceFailed     = "external_service_failed"
 )

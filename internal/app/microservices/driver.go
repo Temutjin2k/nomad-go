@@ -8,6 +8,7 @@ import (
 
 	"github.com/Temutjin2k/ride-hail-system/config"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/server"
+	"github.com/Temutjin2k/ride-hail-system/internal/adapter/locationIQ"
 	repo "github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
 	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver.go"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
@@ -29,9 +30,17 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 		return nil, err
 	}
 
+	// Repo adapters
 	trm := trm.New(postgresDB.Pool)
 	driverRepo := repo.NewDriverRepo(postgresDB.Pool)
-	driverService := drivergo.New(driverRepo, trm, log)
+	sessionRepo := repo.NewSessionRepo(postgresDB.Pool)
+	coordinateRepo := repo.NewCoordinateRepo(postgresDB.Pool)
+
+	// External API client
+	locationIQclient := locationIQ.New(cfg.ExternalAPIConfig.LocationIQapiKey)
+
+	// Main Service
+	driverService := drivergo.New(driverRepo, sessionRepo, coordinateRepo, locationIQclient, trm, log)
 
 	httpServer, err := server.New(cfg, driverService, log)
 	if err != nil {
