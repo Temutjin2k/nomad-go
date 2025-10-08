@@ -23,10 +23,11 @@ var (
 type Config struct {
 	Mode types.ServiceMode
 
-	Database  DatabaseConfig
-	RabbitMQ  RabbitMQConfig
-	WebSocket WebSocketConfig
-	Services  ServicesConfig
+	Database          DatabaseConfig
+	RabbitMQ          RabbitMQConfig
+	WebSocket         WebSocketConfig
+	ExternalAPIConfig ExternalAPIConfig
+	Services          ServicesConfig
 }
 
 type DatabaseConfig struct {
@@ -35,6 +36,10 @@ type DatabaseConfig struct {
 	User     string `env:"DATABASE_USER" default:"ridehail_user"`
 	Password string `env:"DATABASE_PASSWORD" default:"ridehail_pass"`
 	Database string `env:"DATABASE_DATABASE" default:"ridehail_db"`
+}
+
+type ExternalAPIConfig struct {
+	LocationIQapiKey string `env:"LOCATIONIQ_API_KEY"`
 }
 
 func (c DatabaseConfig) GetDSN() string {

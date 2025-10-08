@@ -8,6 +8,7 @@ import (
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
+	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -73,7 +74,7 @@ func (r *RabbitMQ) monitorConnection() {
 	closeErr := <-r.closeChan
 	r.isClosed = true
 
-	ctx := logger.WithAction(context.Background(), types.ActionRabbitConnectionClosed)
+	ctx := wrap.WithAction(context.Background(), types.ActionRabbitConnectionClosed)
 
 	if closeErr != nil {
 		r.log.Error(ctx, "RabbitMQ connection closed with error", closeErr)
@@ -97,7 +98,7 @@ func (r *RabbitMQ) Close(ctx context.Context) error {
 
 // closeWithContext - closes RabbitMQ channel and connection using context
 func (r *RabbitMQ) closeWithContext(ctx context.Context) error {
-	ctx = logger.WithAction(ctx, types.ActionRabbitConnectionClosing)
+	ctx = wrap.WithAction(ctx, types.ActionRabbitConnectionClosing)
 
 	r.log.Debug(ctx, "closing channel")
 
@@ -142,7 +143,7 @@ func (r *RabbitMQ) closeWithContext(ctx context.Context) error {
 		}
 	}
 
-	ctx = logger.WithAction(ctx, types.ActionRabbitConnectionClosed)
+	ctx = wrap.WithAction(ctx, types.ActionRabbitConnectionClosed)
 	r.log.Info(ctx, "rabbitMQ closed")
 
 	return nil

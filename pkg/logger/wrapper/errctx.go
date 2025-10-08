@@ -1,4 +1,4 @@
-package logger
+package wrap
 
 import (
 	"context"
@@ -21,37 +21,11 @@ func (e *errorWithLogCtx) Unwrap() error {
 	return e.err
 }
 
-// WrapError wraps an error with the current LogCtx from the context
-func WrapError(ctx context.Context, err error) error {
-	if err == nil {
-		return nil
-	}
-
-	// If already wrapped, just update logCtx
-	var e *errorWithLogCtx
-	if errors.As(err, &e) {
-		if x, ok := ctx.Value(logCtxKey).(LogCtx); ok {
-			e.logCtx = x
-		}
-		e.err = err
-		return e
-	}
-
-	c := LogCtx{}
-	if x, ok := ctx.Value(logCtxKey).(LogCtx); ok {
-		c = x
-	}
-	return &errorWithLogCtx{
-		err:    err,
-		logCtx: c,
-	}
-}
-
 // ErrorCtx extracts the LogCtx from an error if it is of type errorWithLogCtx
 func ErrorCtx(ctx context.Context, err error) context.Context {
 	var e *errorWithLogCtx
 	if errors.As(err, &e) && e != nil {
-		return context.WithValue(ctx, logCtxKey, e.logCtx)
+		return context.WithValue(ctx, LogCtxKey, e.logCtx)
 	}
 	return ctx
 }
