@@ -31,7 +31,7 @@ func NewDriver(service DriverService, l logger.Logger) *Driver {
 func (h *Driver) Register(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "register_driver")
 
-	var RegisterReq dto.RegisterReq
+	var RegisterReq dto.RegisterDriverRequest
 	if err := readJSON(w, r, &RegisterReq); err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to read request JSON data", err)
 		errorResponse(w, http.StatusBadRequest, err.Error())

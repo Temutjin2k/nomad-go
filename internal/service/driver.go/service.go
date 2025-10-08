@@ -78,7 +78,7 @@ func (s *Service) Register(ctx context.Context, newDriver *models.Driver) error 
 		// Determine vehicle class (Economy / XL / Premium)
 		newDriver.Vehicle.Type = classify(newDriver)
 		newDriver.Rating = 5.0
-		newDriver.Status = types.OfflineStatus
+		newDriver.Status = types.StatusDriverOffline
 
 		// Save new driver record
 		if err := s.driverRepo.Create(ctx, newDriver); err != nil {
@@ -116,17 +116,17 @@ func classify(driver *models.Driver) types.VehicleClass {
 	if v.Type == "XL" || v.Type == "VAN" || v.Type == "MINIVAN" ||
 		v.Type == "SUV" || v.Type == "CROSSOVER" {
 		if v.Year >= currentYear-10 { // not older than 10 years
-			return types.XLClass
+			return types.ClassXL
 		}
 	}
 
 	// Premium class – luxury brands under 6 years old
 	if premiumBrands[makeUpper] && v.Year >= currentYear-6 {
-		return types.PremiumClass
+		return types.ClassPremium
 	}
 
 	// Default → Economy
-	return types.EconomyClass
+	return types.ClassEconomy
 }
 
 // GoOnline puts a driver into "available" mode, creates a session,
@@ -145,11 +145,11 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, latitude, lo
 		}
 
 		// Change driver status to AVAILABLE
-		oldstatus, err := s.driverRepo.ChangeStatus(ctx, driverID, types.AvailableStatus)
+		oldstatus, err := s.driverRepo.ChangeStatus(ctx, driverID, types.StatusDriverAvailable)
 		if err != nil {
 			return wrap.Error(ctx, fmt.Errorf("failed to change driver status: %w", err))
 		}
-		if oldstatus == types.AvailableStatus {
+		if oldstatus == types.StatusDriverAvailable {
 			return types.ErrDriverAlreadyOnline
 		}
 

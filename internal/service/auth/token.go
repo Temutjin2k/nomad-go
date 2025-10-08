@@ -13,16 +13,16 @@ import (
 )
 
 type TokenService struct {
-	UserDal    UserRepo
+	userRepo   UserRepo
 	RefreshTTL time.Duration
 	AccessTTL  time.Duration
 	log        logger.Logger
 	secret     string
 }
 
-func NewTokenService(secret string, UserDal UserRepo, RefreshTTL time.Duration, AccessTTL time.Duration, log logger.Logger) *TokenService {
+func NewTokenService(secret string, userRepo UserRepo, RefreshTTL time.Duration, AccessTTL time.Duration, log logger.Logger) *TokenService {
 	return &TokenService{
-		UserDal:    UserDal,
+		userRepo:   userRepo,
 		RefreshTTL: RefreshTTL,
 		AccessTTL:  AccessTTL,
 		secret:     secret,
@@ -34,18 +34,24 @@ func (s *TokenService) getSecret() string {
 	return s.secret
 }
 
-func (s *TokenService) GenerateTokens(user models.User) (models.TokenPair, error) {
+func (s *TokenService) GenerateTokens(user *models.User) (*models.TokenPair, error) {
 	var signed []string
-	for _, claim := range []jwt.Claims{NewAccessClaim(user, s.AccessTTL), NewRefreshClaim(user, s.RefreshTTL)} {
+
+	claims := []jwt.Claims{
+		NewAccessClaim(user, s.AccessTTL),
+		NewRefreshClaim(user, s.RefreshTTL),
+	}
+
+	for _, claim := range claims {
 		// Подпись каждого jwt токена
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claim)
 		signedToken, err := token.SignedString([]byte(s.getSecret()))
 		if err != nil {
-			return models.TokenPair{}, err
+			return nil, err
 		}
 		signed = append(signed, signedToken)
 	}
-	return models.TokenPair{
+	return &models.TokenPair{
 		AccessExpiresAt:  time.Now().Add(s.AccessTTL),
 		RefreshExpiresAt: time.Now().Add(s.RefreshTTL),
 		AccessToken:      signed[0],
@@ -53,116 +59,105 @@ func (s *TokenService) GenerateTokens(user models.User) (models.TokenPair, error
 	}, nil
 }
 
-func NewAccessClaim(user models.User, accessTTL time.Duration) jwt.Claims {
+func NewAccessClaim(user *models.User, accessTTL time.Duration) jwt.Claims {
 	return jwt.MapClaims{
-		"ID":         user.ID,
-		"name":       user.Name,
-		"email":      user.Email,
-		"is_refresh": false,
-		"role":       user.Role,
-		"exp":        time.Now().Add(accessTTL).Unix(),
+		"typ":     models.AccessToken,
+		"user_id": user.ID.String(),
+		"email":   user.Email,
+		"role":    user.Role,
+		"exp":     time.Now().Add(accessTTL).Unix(),
 	}
 }
 
-func NewRefreshClaim(user models.User, refreshTTL time.Duration) jwt.Claims {
+func NewRefreshClaim(user *models.User, refreshTTL time.Duration) jwt.Claims {
 	return jwt.MapClaims{
-		"ID":         user.ID,
-		"name":       user.Name,
-		"email":      user.Email,
-		"is_refresh": true,
-		"role":       user.Role,
-		"exp":        time.Now().Add(refreshTTL).Unix(),
+		"typ":     models.RefreshToken,
+		"user_id": user.ID.String(),
+		"email":   user.Email,
+		"role":    user.Role,
+		"exp":     time.Now().Add(refreshTTL).Unix(),
 	}
 }
 
-func (s *TokenService) Refresh(refreshToken string) (models.TokenPair, error) {
+func (s *TokenService) Refresh(refreshToken string) (*models.TokenPair, error) {
 	ctx := wrap.WithAction(context.Background(), "refresh_token")
 
 	claims, err := s.Validate(refreshToken)
 	if err != nil {
 		s.log.Error(ctx, "Refresh token is invalid", err)
-		return models.TokenPair{}, ErrInvalidToken
+		return nil, ErrInvalidToken
 	}
 
 	// Проверяем существует ли пользователь
-	user, err := s.UserDal.GetUser(claims.Email)
+	user, err := s.userRepo.GetUser(ctx, claims.Email)
 	if err != nil {
 		s.log.Error(ctx, "Failed to check user uniqueness", err)
-		return models.TokenPair{}, ErrUnexpected
+		return nil, ErrUnexpected
 	}
 
-	pair, err := s.GenerateTokens(*user)
+	if user == nil {
+		return nil, ErrUserWithEmailNotFound
+	}
+
+	pair, err := s.GenerateTokens(user)
 	if err != nil {
 		s.log.Error(ctx, "Failed to generate tokens", err)
-		return models.TokenPair{}, ErrUnexpected
+		return nil, ErrUnexpected
 	}
 
 	return pair, nil
 }
 
-func (s *TokenService) Validate(token string) (models.CustomClaims, error) {
+func (s *TokenService) Validate(token string) (*models.CustomClaims, error) {
 	parsedToken, err := jwt.ParseWithClaims(token, jwt.MapClaims{}, func(t *jwt.Token) (any, error) {
+		if t.Method != jwt.SigningMethodHS256 {
+			return nil, ErrInvalidToken
+		}
 		return []byte(s.getSecret()), nil
 	})
+	if err != nil || !parsedToken.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	mc, ok := parsedToken.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, ErrInvalidToken
+	}
+
+	if typ, _ := mc["typ"].(string); typ == "" {
+		return nil, fmt.Errorf("invalid or missing 'typ' in token claims")
+	}
+
+	userIDStr, _ := mc["user_id"].(string)
+	if userIDStr == "" {
+		return nil, fmt.Errorf("invalid or missing 'user_id' in token claims")
+	}
+	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		return models.CustomClaims{}, ErrInvalidToken
+		return nil, fmt.Errorf("invalid 'user_id' in token claims")
 	}
 
-	if !parsedToken.Valid {
-		return models.CustomClaims{}, ErrInvalidToken
-	}
+	email, _ := mc["email"].(string)
+	role, _ := mc["role"].(string)
 
-	mapClaims, ok := parsedToken.Claims.(jwt.MapClaims)
+	// exp → time.Time и проверка истечения
+	expFloat, ok := mc["exp"].(float64)
 	if !ok {
-		return models.CustomClaims{}, ErrInvalidToken
+		return nil, fmt.Errorf("invalid or missing 'exp' in token claims")
 	}
 
-	var claims models.CustomClaims
-	var invOrMissingForm string = "invalid or missing '%s' in token claims"
-
-	// Извлекаем Name
-	if id, ok := mapClaims["ID"].(uuid.UUID); ok {
-		claims.ID = id
-	} else {
-		return models.CustomClaims{}, fmt.Errorf(invOrMissingForm, "ID")
-	}
-
-	if role, ok := mapClaims["role"].(string); ok {
-		claims.Role = role
-	} else {
-		return models.CustomClaims{}, fmt.Errorf(invOrMissingForm, "role")
-	}
-
-	// Извлекаем Email
-	if email, ok := mapClaims["email"].(string); ok {
-		claims.Email = email
-	} else {
-		return models.CustomClaims{}, fmt.Errorf(invOrMissingForm, "email")
-	}
-
-	// Извлекаем Name
-	if name, ok := mapClaims["name"].(string); ok {
-		claims.Name = name
-	} else {
-		return models.CustomClaims{}, fmt.Errorf(invOrMissingForm, "name")
-	}
-
-	if isRefresh, ok := mapClaims["is_refresh"].(bool); ok {
-		claims.IsRefresh = isRefresh
-	} else {
-		return models.CustomClaims{}, fmt.Errorf(invOrMissingForm, "is_refresh")
-	}
-
-	// Извлекаем exp и проверяем время
-	expFloat, ok := mapClaims["exp"].(float64)
-	if !ok {
-		return models.CustomClaims{}, fmt.Errorf(invOrMissingForm, "exp")
-	}
 	expTime := time.Unix(int64(expFloat), 0)
-	claims.ExpiresAt = jwt.NewNumericDate(expTime)
-
 	if time.Now().After(expTime) {
-		return models.CustomClaims{}, ErrExpToken
+		return nil, ErrExpToken
+	}
+
+	claims := &models.CustomClaims{
+		UserID: userID,
+		Email:  email,
+		Role:   role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expTime),
+		},
 	}
 
 	return claims, nil

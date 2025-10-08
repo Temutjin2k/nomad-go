@@ -71,7 +71,7 @@ func (r *DriverRepo) IsDriverExist(ctx context.Context, id uuid.UUID) (bool, err
 	`
 
 	var exist bool
-	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, id, types.DriverRole).Scan(&exist); err != nil {
+	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, id, types.RoleDriver).Scan(&exist); err != nil {
 		if err == pgx.ErrNoRows {
 			return false, types.ErrUserNotFound
 		}

@@ -15,6 +15,7 @@ import (
 type AuthService interface {
 	Register(ctx context.Context, newUser *models.UserCreateRequest) (uuid.UUID, error)
 	Login(ctx context.Context, email, password string) (*models.TokenPair, error)
+	RoleCheck(ctx context.Context, token string) (*models.User, error)
 }
 
 type Auth struct {
@@ -32,7 +33,7 @@ func NewAuth(service AuthService, l logger.Logger) *Auth {
 func (h *Auth) Register(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "register_user")
 
-	req := &models.UserCreateRequest{}
+	req := &dto.RegisterUserRequest{}
 	if err := readJSON(w, r, req); err != nil {
 		h.l.Error(ctx, "failed to read request JSON data", err)
 		badRequestResponse(w, err.Error())
@@ -47,7 +48,7 @@ func (h *Auth) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := h.auth.Register(ctx, req)
+	id, err := h.auth.Register(ctx, req.ToModel())
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to register a new user", err)
 		errorResponse(w, GetCode(err), err.Error())
@@ -64,17 +65,20 @@ func (h *Auth) Register(w http.ResponseWriter, r *http.Request) {
 func (h *Auth) Login(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "login_user")
 
-	b := &struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}{}
-
-	if err := readJSON(w, r, b); err != nil {
+	req := &dto.LoginRequest{}
+	if err := readJSON(w, r, req); err != nil {
 		badRequestResponse(w, err.Error())
 		return
 	}
 
-	tokens, err := h.auth.Login(ctx, b.Email, b.Password)
+	v := validator.New()
+	dto.ValidateLogin(v, req)
+	if !v.Valid() {
+		failedValidationResponse(w, v.Errors)
+		return
+	}
+
+	tokens, err := h.auth.Login(ctx, req.Email, req.Password)
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to login user", err)
 		errorResponse(w, GetCode(err), err.Error())

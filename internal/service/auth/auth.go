@@ -5,9 +5,9 @@ import (
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
+	"github.com/Temutjin2k/ride-hail-system/pkg/hasher"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
-	"github.com/Temutjin2k/ride-hail-system/pkg/passhash"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 )
 
@@ -28,17 +28,17 @@ func NewAuthService(UserDal UserRepo, TokenServ TokenProvider, log logger.Logger
 // Returns (AccessToken, RefreshToken, statusCode, error message)
 func (s *AuthService) Login(ctx context.Context, email, password string) (*models.TokenPair, error) {
 	// Проверяем существует ли пользователь
-	user, err := s.userRepo.GetUser(email)
+	user, err := s.userRepo.GetUser(ctx, email)
 	if err != nil {
 		return nil, err
 	}
 
 	if user == nil {
-		return nil, ErrUserWithEmailNotFound
+		return nil, types.ErrUserNotFound
 	}
 
 	// Проверяем пароль
-	if ok, err := passhash.VerifyPassword(password, user.GetPassword()); err != nil || !ok {
+	if ok := hasher.Verify(password, user.PasswordHash); !ok {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -56,9 +56,9 @@ func (s *AuthService) Register(ctx context.Context, user *models.UserCreateReque
 	ctx = wrap.WithAction(ctx, "passenger_register")
 
 	// Check if user with such email already exists
-	u, err := s.userRepo.GetUser(user.Email)
+	u, err := s.userRepo.GetUser(ctx, user.Email)
 	if err != nil {
-		return uuid.UUID{}, ErrUnexpected
+		return uuid.UUID{}, wrap.Error(ctx, err)
 	}
 
 	// If user exists, return error
@@ -67,43 +67,40 @@ func (s *AuthService) Register(ctx context.Context, user *models.UserCreateReque
 	}
 
 	// Hash password
-	hashPassword, err := passhash.HashPassword(user.Password)
-	if err != nil {
-		s.log.Error(ctx, "Failed to generate hash from password", err)
-		return uuid.UUID{}, ErrUnexpected
-	}
+	hashPassword := hasher.Hash(user.Password)
 
 	// Save user
 	newUser := models.User{
-		Name:  user.Name,
-		Email: user.Email,
-		Role:  types.PassengerRole.String(),
+		Email:        user.Email,
+		Role:         types.RolePassenger.String(),
+		PasswordHash: hashPassword,
+		Status:       types.StatusUserActive.String(),
 	}
-	newUser.SetPassword(hashPassword)
 
-	id, err := s.userRepo.CreateUser(&newUser)
+	id, err := s.userRepo.CreateUser(ctx, &newUser)
 	if err != nil {
-		s.log.Error(ctx, "Failed to save user", err)
-		return uuid.UUID{}, ErrUnexpected
+		return uuid.UUID{}, wrap.Error(ctx, err)
 	}
 
 	return id, nil
 }
 
-func (s *AuthService) RoleCheck(token string) (*models.User, error) {
+func (s *AuthService) RoleCheck(ctx context.Context, token string) (*models.User, error) {
 	// Валидируем его
 	claim, err := s.tokenService.Validate(token)
 	if err != nil {
-		s.log.Error(context.Background(), "Access token is invalid", err)
-		return nil, ErrInvalidToken
+		return nil, err
 	}
 
 	// Проверяем существует ли пользователь
-	existUser, err := s.userRepo.GetUser(claim.Email)
+	user, err := s.userRepo.GetUser(ctx, claim.Email)
 	if err != nil {
-		return nil, ErrUnexpected
+		return nil, wrap.Error(ctx, err)
 	}
 
-	// Читаем админ ли он
-	return existUser, nil
+	if user == nil {
+		return nil, ErrUserWithEmailNotFound
+	}
+
+	return user, nil
 }

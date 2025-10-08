@@ -19,13 +19,15 @@ func (a *API) setupRoutes() {
 		a.setupRideRoutes()
 	case types.DriverAndLocationService:
 		a.setupDriverAndLocationRoutes()
+	case types.AuthService:
+		a.SetupAuthRoutes()
 	}
 }
 
 // setupAdminRoutes setups routes for admin service
 func (a *API) setupAdminRoutes() {
-	a.mux.HandleFunc("GET /admin/overview", a.routes.admin.GetOverview)        // Get system metrics overview
-	a.mux.HandleFunc("GET /admin/rides/active", a.routes.admin.GetActiveRides) // Get list of active rides
+	a.mux.Handle("GET /admin/overview", a.m.RequireRoles(a.routes.admin.GetOverview, types.RoleAdmin))     // Get system metrics overview
+	a.mux.Handle("GET /admin/rides/active", a.m.RequireRoles(a.routes.admin.GetOverview, types.RoleAdmin)) // Get list of active rides
 }
 
 // setupRideRoutes setups routes for ride service
@@ -44,6 +46,11 @@ func (a *API) setupDriverAndLocationRoutes() {
 	a.mux.HandleFunc("POST /drivers/{driver_id}/start", func(w http.ResponseWriter, r *http.Request) {})    // Start a ride
 	a.mux.HandleFunc("POST /drivers/{driver_id}/complete", func(w http.ResponseWriter, r *http.Request) {}) // Complete a ride
 	a.mux.HandleFunc("GET /ws/drivers/{driver_id}", func(w http.ResponseWriter, r *http.Request) {})        // WebSocket connection for drivers
+}
+
+func (a *API) SetupAuthRoutes() {
+	a.mux.HandleFunc("POST /auth/register", a.routes.auth.Register)
+	a.mux.HandleFunc("POST /auth/login", a.routes.auth.Login)
 }
 
 // HealthCheck - returns system information.

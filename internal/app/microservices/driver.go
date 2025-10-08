@@ -42,7 +42,7 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 	// Main Service
 	driverService := drivergo.New(driverRepo, sessionRepo, coordinateRepo, locationIQclient, trm, log)
 
-	httpServer, err := server.New(cfg, driverService, nil, log)
+	httpServer, err := server.New(cfg, driverService, nil, nil, log)
 	if err != nil {
 		log.Error(ctx, "Failed to setup http server", err)
 		return nil, err

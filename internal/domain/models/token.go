@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	Refresh = "refresh_token"
-	Access  = "access_token"
+	RefreshToken = "refresh_token"
+	AccessToken  = "access_token"
 )
 
 type TokenPair struct {
@@ -20,11 +20,8 @@ type TokenPair struct {
 }
 
 type CustomClaims struct {
-	ID        uuid.UUID `json:"ID"`
-	Name      string    `json:"name"`
-	Email     string    `json:"email"`
-	Password  string    `json:"password"`
-	Role      string    `json:"role"`
-	IsRefresh bool      `json:"is_refresh"`
+	UserID uuid.UUID `json:"ID"`
+	Email  string    `json:"email"`
+	Role   string    `json:"role"`
 	jwt.RegisteredClaims
 }

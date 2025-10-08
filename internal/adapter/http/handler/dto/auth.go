@@ -5,7 +5,26 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
 )
 
-func ValidateNewUser(v *validator.Validator, user *models.UserCreateRequest) {
+type RegisterUserRequest struct {
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (r *RegisterUserRequest) ToModel() *models.UserCreateRequest {
+	return &models.UserCreateRequest{
+		Name:     r.Name,
+		Email:    r.Email,
+		Password: r.Password,
+	}
+}
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func ValidateNewUser(v *validator.Validator, user *RegisterUserRequest) {
 	v.Check(user.Name != "", "name", "must be provided")
 	v.Check(len(user.Name) <= 500, "name", "must not be more than 500 bytes long")
 
@@ -16,4 +35,9 @@ func ValidateNewUser(v *validator.Validator, user *models.UserCreateRequest) {
 	v.Check(user.Password != "", "password", "must be provided")
 	v.Check(len(user.Password) >= 8, "password", "must be at least 8 bytes long")
 	v.Check(len(user.Password) <= 50, "password", "must not be more than 50 bytes long")
+}
+
+func ValidateLogin(v *validator.Validator, user *LoginRequest) {
+	v.Check(user.Email != "", "email", "must be provided")
+	v.Check(user.Password != "", "password", "must be provided")
 }
