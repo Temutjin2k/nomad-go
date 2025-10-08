@@ -9,14 +9,14 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
 )
 
-type RegisterReq struct {
+type RegisterDriverRequest struct {
 	ID            uuid.UUID      `json:"id"`
 	Name          string         `json:"name"`
 	LicenseNumber string         `json:"license_number"`
 	Vehicle       models.Vehicle `json:"vehicle"`
 }
 
-func (r *RegisterReq) Validate(v *validator.Validator) {
+func (r *RegisterDriverRequest) Validate(v *validator.Validator) {
 	// ID
 	v.Check(r.ID != uuid.UUID{}, "id", "must be provided")
 
@@ -53,7 +53,7 @@ func (r *RegisterReq) Validate(v *validator.Validator) {
 	)
 }
 
-func (r *RegisterReq) ToModel() *models.Driver {
+func (r *RegisterDriverRequest) ToModel() *models.Driver {
 	return &models.Driver{
 		ID:            r.ID,
 		Name:          r.Name,

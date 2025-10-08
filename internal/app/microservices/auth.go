@@ -10,13 +10,12 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/config"
 	httpserver "github.com/Temutjin2k/ride-hail-system/internal/adapter/http/server"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
-	"github.com/Temutjin2k/ride-hail-system/internal/service/admin"
 	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	postgresclient "github.com/Temutjin2k/ride-hail-system/pkg/postgres"
 )
 
-type AdminService struct {
+type AuthService struct {
 	postgresDB *postgresclient.PostgreDB
 	httpServer *httpserver.API
 
@@ -24,22 +23,20 @@ type AdminService struct {
 	log logger.Logger
 }
 
-func NewAdmin(ctx context.Context, cfg config.Config, log logger.Logger) (*AdminService, error) {
+func NewAuth(ctx context.Context, cfg config.Config, log logger.Logger) (*AdminService, error) {
 	db, err := postgresclient.New(ctx, cfg.Database)
 	if err != nil {
 		return nil, err
 	}
 
 	// repositories
-	adminRepo := postgres.NewAdminRepo(db.Pool)
 	userRepo := postgres.NewUserRepo(db.Pool)
 
 	// services
-	adminSvc := admin.NewAdminService(adminRepo, log)
 	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, cfg.Auth.AccessTokenTTL, cfg.Auth.RefreshTokenTTL, log)
 	authSvc := auth.NewAuthService(userRepo, tokenSvc, log)
 
-	server, err := httpserver.New(cfg, nil, adminSvc, authSvc, log)
+	server, err := httpserver.New(cfg, nil, nil, authSvc, log)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +49,7 @@ func NewAdmin(ctx context.Context, cfg config.Config, log logger.Logger) (*Admin
 	}, nil
 }
 
-func (s *AdminService) Start(ctx context.Context) error {
+func (s *AuthService) Start(ctx context.Context) error {
 	defer func() {
 		s.close(ctx)
 		s.log.Info(ctx, "admin service closed")
@@ -75,7 +72,7 @@ func (s *AdminService) Start(ctx context.Context) error {
 	}
 }
 
-func (s *AdminService) close(ctx context.Context) {
+func (s *AuthService) close(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 	defer cancel()
 

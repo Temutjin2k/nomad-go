@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	"github.com/Temutjin2k/ride-hail-system/pkg/configparser"
@@ -20,27 +21,54 @@ var (
 )
 
 // Config contains all configuration variables of the application
-type Config struct {
-	Mode types.ServiceMode
+type (
+	Config struct {
+		Mode types.ServiceMode
 
-	Database          DatabaseConfig
-	RabbitMQ          RabbitMQConfig
-	WebSocket         WebSocketConfig
-	ExternalAPIConfig ExternalAPIConfig
-	Services          ServicesConfig
-}
+		Database          DatabaseConfig
+		RabbitMQ          RabbitMQConfig
+		WebSocket         WebSocketConfig
+		ExternalAPIConfig ExternalAPIConfig
+		Services          ServicesConfig
+		Auth              Auth
+	}
 
-type DatabaseConfig struct {
-	Host     string `env:"DATABASE_HOST" default:"localhost"`
-	Port     string `env:"DATABASE_PORT" default:"5432"`
-	User     string `env:"DATABASE_USER" default:"ridehail_user"`
-	Password string `env:"DATABASE_PASSWORD" default:"ridehail_pass"`
-	Database string `env:"DATABASE_DATABASE" default:"ridehail_db"`
-}
+	DatabaseConfig struct {
+		Host     string `env:"DATABASE_HOST" default:"localhost"`
+		Port     string `env:"DATABASE_PORT" default:"5432"`
+		User     string `env:"DATABASE_USER" default:"ridehail_user"`
+		Password string `env:"DATABASE_PASSWORD" default:"ridehail_pass"`
+		Database string `env:"DATABASE_DATABASE" default:"ridehail_db"`
+	}
 
-type ExternalAPIConfig struct {
-	LocationIQapiKey string `env:"LOCATIONIQ_API_KEY"`
-}
+	ExternalAPIConfig struct {
+		LocationIQapiKey string `env:"LOCATIONIQ_API_KEY"`
+	}
+
+	RabbitMQConfig struct {
+		Host     string `env:"RABBITMQ_HOST" default:"localhost"`
+		Port     string `env:"RABBITMQ_PORT" default:"5672"`
+		User     string `env:"RABBITMQ_USER" default:"guest"`
+		Password string `env:"RABBITMQ_PASSWORD" default:"guest"`
+	}
+
+	WebSocketConfig struct {
+		Port string `env:"WEBSOCKET_PORT" default:"8080"`
+	}
+
+	ServicesConfig struct {
+		RideService           string `env:"SERVICES_RIDE_SERVICE" default:"3000"`
+		DriverLocationService string `env:"SERVICES_DRIVER_LOCATION_SERVICE" default:"3001"`
+		AdminService          string `env:"SERVICES_ADMIN_SERVICE" default:"3004"`
+		AuthService           string `env:"SERVICES_AUTH_SERVICE" default:"3005"`
+	}
+
+	Auth struct {
+		AccessTokenTTL  time.Duration `env:"AUTH_ACCESS_TOKEN_TTL" default:"15m"`
+		RefreshTokenTTL time.Duration `env:"AUTH_REFRESH_TOKEN_TTL" default:"168h"`
+		JWTSecret       string        `env:"AUTH_JWT_SECRET" default:"supersecretkey"`
+	}
+)
 
 func (c DatabaseConfig) GetDSN() string {
 	return fmt.Sprintf(
@@ -53,13 +81,6 @@ func (c DatabaseConfig) GetDSN() string {
 	)
 }
 
-type RabbitMQConfig struct {
-	Host     string `env:"RABBITMQ_HOST" default:"localhost"`
-	Port     string `env:"RABBITMQ_PORT" default:"5672"`
-	User     string `env:"RABBITMQ_USER" default:"guest"`
-	Password string `env:"RABBITMQ_PASSWORD" default:"guest"`
-}
-
 func (c RabbitMQConfig) GetDSN() string {
 	return fmt.Sprintf("amqp://%s:%s@%s:%s/",
 		c.User,
@@ -67,16 +88,6 @@ func (c RabbitMQConfig) GetDSN() string {
 		c.Host,
 		c.Port,
 	)
-}
-
-type WebSocketConfig struct {
-	Port string `env:"WEBSOCKET_PORT" default:"8080"`
-}
-
-type ServicesConfig struct {
-	RideService           string `env:"SERVICES_RIDE_SERVICE" default:"3000"`
-	DriverLocationService string `env:"SERVICES_DRIVER_LOCATION_SERVICE" default:"3001"`
-	AdminService          string `env:"SERVICES_ADMIN_SERVICE" default:"3004"`
 }
 
 func NewConfig(filepath string) (*Config, error) {

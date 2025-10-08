@@ -9,6 +9,7 @@ import (
 
 	"github.com/Temutjin2k/ride-hail-system/config"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler"
+	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/middleware"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
@@ -21,6 +22,7 @@ type API struct {
 	mux    *http.ServeMux
 	server *http.Server
 	routes *handlers // routes/handlers
+	m      *middleware.Middleware
 
 	addr string
 	cfg  config.Config
@@ -31,11 +33,22 @@ type handlers struct {
 	ride   *handler.Ride
 	driver *handler.Driver
 	admin  *handler.Admin
+	auth   *handler.Auth
 }
 
-func New(cfg config.Config, driverService handler.DriverService, adminService handler.AdminService, logger logger.Logger) (*API, error) {
+func New(
+	cfg config.Config,
+	driverService handler.DriverService,
+	adminService handler.AdminService,
+	authService handler.AuthService,
+	logger logger.Logger,
+) (*API, error) {
 	var addr string
 	handlers := &handlers{}
+
+	if authService == nil {
+		return nil, errors.New("auth service is required")
+	}
 
 	switch cfg.Mode {
 	case types.RideService:
@@ -47,19 +60,24 @@ func New(cfg config.Config, driverService handler.DriverService, adminService ha
 	case types.AdminService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.AdminService)
 		handlers.admin = handler.NewAdmin(adminService, logger)
+	case types.AuthService:
+		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.AuthService)
+		handlers.auth = handler.NewAuth(authService, logger)
 	default:
 		return nil, fmt.Errorf("invalid mode: %s", cfg.Mode)
 	}
+
+	mid := middleware.NewMiddleware(authService, logger)
 
 	api := &API{
 		mode: cfg.Mode,
 
 		mux:    http.NewServeMux(),
 		routes: handlers,
-
-		addr: addr,
-		cfg:  cfg,
-		log:  logger,
+		m:      mid,
+		addr:   addr,
+		cfg:    cfg,
+		log:    logger,
 	}
 
 	api.server = &http.Server{
@@ -95,4 +113,9 @@ func (a *API) Run(ctx context.Context, errCh chan<- error) {
 			return
 		}
 	}()
+}
+
+// withMiddleware applies middlewares to the mux
+func (a *API) withMiddleware() http.Handler {
+	return a.m.Recover(a.m.RequestID(a.m.Auth(a.mux)))
 }
