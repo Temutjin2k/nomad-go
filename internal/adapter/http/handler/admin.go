@@ -27,29 +27,34 @@ func NewAdmin(s AdminService, l logger.Logger) *Admin {
 
 func (h *Admin) GetOverview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	ctx = logger.WithAction(ctx, "admin_get_overview")
 
 	res, err := h.s.GetOverview(ctx)
 	if err != nil {
-		h.l.Error(logger.ErrorCtx(ctx, err), "GetOverview: failed to get overview", err)
+		h.l.Error(logger.ErrorCtx(ctx, err), "failed to get overview", err)
 		internalErrorResponse(w, err.Error())
 		return
 	}
 
 	if err := writeJSON(w, http.StatusOK, envelope{"data": res}, nil); err != nil {
+		h.l.Error(ctx, "failed to write response", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
 func (h *Admin) GetActiveRides(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	ctx = logger.WithAction(ctx, "admin_get_active_rides")
+
 	res, err := h.s.GetActiveRides(ctx)
 	if err != nil {
-		h.l.Error(logger.ErrorCtx(ctx, err), "GetActiveRides: failed to get active rides", err)
+		h.l.Error(logger.ErrorCtx(ctx, err), "failed to get active rides", err)
 		internalErrorResponse(w, err.Error())
 		return
 	}
 
 	if err := writeJSON(w, http.StatusOK, envelope{"data": res}, nil); err != nil {
+		h.l.Error(ctx, "failed to write response", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
