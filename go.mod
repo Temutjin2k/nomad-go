@@ -2,11 +2,9 @@ module github.com/Temutjin2k/ride-hail-system
 
 go 1.25.1
 
-require github.com/jackc/pgx/v5 v5.7.6
-
 require (
-	github.com/jackc/pgx v3.6.2+incompatible // indirect
-	github.com/pkg/errors v0.9.1 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/jackc/pgx/v5 v5.7.6
 )
 
 require (

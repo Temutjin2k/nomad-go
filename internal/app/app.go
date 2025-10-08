@@ -67,6 +67,8 @@ func (a *App) initService(ctx context.Context, mode types.ServiceMode) error {
 		service, err = microservices.NewDriver(ctx, a.cfg, a.log)
 	case types.AdminService:
 		service, err = microservices.NewAdmin(ctx, a.cfg, a.log)
+	case types.AuthService:
+		service, err = microservices.NewAuth(ctx, a.cfg, a.log)
 	default:
 		return ErrInvalidMode
 	}

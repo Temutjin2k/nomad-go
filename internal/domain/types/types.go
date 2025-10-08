@@ -9,43 +9,52 @@ const (
 	RideService              ServiceMode = "ride-service"
 	DriverAndLocationService ServiceMode = "driver-service"
 	AdminService             ServiceMode = "admin-service"
+	AuthService              ServiceMode = "auth-service"
 )
 
 // Enum для классов
 type VehicleClass string
 
 const (
-	EconomyClass VehicleClass = "ECONOMY"
-	PremiumClass VehicleClass = "PREMIUM"
-	XLClass      VehicleClass = "XL"
+	ClassEconomy VehicleClass = "ECONOMY"
+	ClassPremium VehicleClass = "PREMIUM"
+	ClassXL      VehicleClass = "XL"
 )
 
 // Enum для статуса водителя
 type DriverStatus string
 
 const (
-	OfflineStatus   DriverStatus = "OFFLINE"
-	AvailableStatus DriverStatus = "AVAILABLE"
-	BusyStatus      DriverStatus = "BUSY"
-	EnRouteStatus   DriverStatus = "EN_ROUTE"
+	StatusDriverOffline   DriverStatus = "OFFLINE"
+	StatusDriverAvailable DriverStatus = "AVAILABLE"
+	StatusDriverBusy      DriverStatus = "BUSY"
+	StatusDriverEnRoute   DriverStatus = "EN_ROUTE"
 )
 
 // Enum для статуса пользователя
 type UserStatus string
 
+func (s UserStatus) String() string {
+	return string(s)
+}
+
 const (
-	ActiveStatus   UserStatus = "ACTIVE"
-	InActiveStatus UserStatus = "INACTIVE"
-	BannedStatus   UserStatus = "BANNED"
+	StatusUserActive   UserStatus = "ACTIVE"
+	StatusUserInactive UserStatus = "INACTIVE"
+	StatusUserBanned   UserStatus = "BANNED"
 )
 
 // Enum для роли пользователя
 type UserRole string
 
+func (r UserRole) String() string {
+	return string(r)
+}
+
 const (
-	PassengerRole UserRole = "PASSENGER"
-	DriverRole    UserRole = "DRIVER"
-	AdminRole     UserRole = "ADMIN"
+	RolePassenger UserRole = "PASSENGER"
+	RoleDriver    UserRole = "DRIVER"
+	RoleAdmin     UserRole = "ADMIN"
 )
 
 // Enum для типов пользователей
