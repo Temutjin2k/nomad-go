@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	l "github.com/Temutjin2k/ride-hail-system/pkg/logger"
+	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 )
 
 func main() {
@@ -13,12 +14,12 @@ func main() {
 	ctx := context.Background()
 
 	if err := SomeLogic(ctx); err != nil {
-		lg.Error(l.ErrorCtx(ctx, err), "error occured", err)
+		lg.Error(wrap.ErrorCtx(ctx, err), "error occured", err)
 	}
 }
 
 func SomeLogic(ctx context.Context) error {
-	ctx = l.WithLogCtx(ctx, l.LogCtx{
+	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
 		Action:    "test",
 		UserID:    "123",
 		RequestID: "request_123",
@@ -26,5 +27,5 @@ func SomeLogic(ctx context.Context) error {
 
 	someError := errors.New("some error")
 
-	return l.WrapError(ctx, someError)
+	return wrap.Error(ctx, someError)
 }

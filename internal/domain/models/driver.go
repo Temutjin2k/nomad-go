@@ -29,3 +29,11 @@ type Vehicle struct {
 	Plate string `json:"plate"`
 	Year  int    `json:"year"`
 }
+
+// DriverStatusUpdateMessage — структура сообщения для обновления статуса водителя
+type DriverStatusUpdateMessage struct {
+	DriverID  uuid.UUID          `json:"driver_id"`
+	Status    types.DriverStatus `json:"status"`
+	RideID    string             `json:"ride_id,omitempty"`
+	Timestamp string             `json:"timestamp"`
+}

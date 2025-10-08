@@ -99,7 +99,7 @@ func GetCode(err error) int {
 		return http.StatusBadRequest
 	case IsOneOf(err, t.ErrUserNotFound):
 		return http.StatusNotFound
-	case IsOneOf(err, t.ErrLicenseAlreadyExists, t.ErrDriverRegistered):
+	case IsOneOf(err, t.ErrLicenseAlreadyExists, t.ErrDriverRegistered, t.ErrDriverAlreadyOnline):
 		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError

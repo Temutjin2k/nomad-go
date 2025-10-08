@@ -47,3 +47,11 @@ const (
 	DriverRole    UserRole = "DRIVER"
 	AdminRole     UserRole = "ADMIN"
 )
+
+// Enum для типов пользователей
+type EntityType string
+
+const (
+	Driver    EntityType = "driver"
+	Passenger EntityType = "passenger"
+)
