@@ -15,12 +15,10 @@ import (
 type envelope map[string]any
 
 func writeJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
-	js, err := json.MarshalIndent(data, "", "\t")
+	js, err := json.Marshal(data)
 	if err != nil {
 		return errors.New("failed to encode json")
 	}
-
-	js = append(js, '\n')
 
 	maps.Copy(w.Header(), headers)
 

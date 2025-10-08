@@ -37,20 +37,6 @@ func New(cfg config.Config, driverService handler.DriverService, logger logger.L
 	var addr string
 	handlers := &handlers{}
 
-	switch cfg.Mode {
-	case types.RideService:
-		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.RideService)
-		handlers.ride = handler.NewRide(logger)
-	case types.DriverAndLocationService:
-		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.DriverLocationService)
-		handlers.driver = handler.NewDriver(driverService, logger)
-	case types.AdminService:
-		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.AdminService)
-		handlers.admin = handler.NewAdmin(logger)
-	default:
-		return nil, fmt.Errorf("invalid mode: %s", cfg.Mode)
-	}
-
 	api := &API{
 		mode: cfg.Mode,
 

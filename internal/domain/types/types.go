@@ -42,6 +42,10 @@ const (
 // Enum для роли пользователя
 type UserRole string
 
+func (r UserRole) String() string {
+	return string(r)
+}
+
 const (
 	PassengerRole UserRole = "PASSENGER"
 	DriverRole    UserRole = "DRIVER"
