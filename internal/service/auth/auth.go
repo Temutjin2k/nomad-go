@@ -85,6 +85,7 @@ func (s *AuthService) Register(ctx context.Context, user *models.UserCreateReque
 	return id, nil
 }
 
+// RoleCheck verifies the access token and returns the associated user if valid.
 func (s *AuthService) RoleCheck(ctx context.Context, token string) (*models.User, error) {
 	ctx = wrap.WithAction(ctx, "role_check")
 	claim, err := s.tokenService.Validate(ctx, token)

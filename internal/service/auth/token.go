@@ -20,10 +20,12 @@ type TokenService struct {
 	userRepo    UserRepo
 	refreshRepo RefreshTokenRepo
 	txManager   trm.TxManager
-	RefreshTTL  time.Duration
-	AccessTTL   time.Duration
-	secret      string
-	log         logger.Logger
+
+	refreshTTL time.Duration
+	accessTTL  time.Duration
+	secret     string
+
+	log logger.Logger
 }
 
 func NewTokenService(secret string, userRepo UserRepo, refreshRepo RefreshTokenRepo, txManager trm.TxManager, RefreshTTL time.Duration, AccessTTL time.Duration, log logger.Logger) *TokenService {
@@ -31,8 +33,8 @@ func NewTokenService(secret string, userRepo UserRepo, refreshRepo RefreshTokenR
 		userRepo:    userRepo,
 		refreshRepo: refreshRepo,
 		txManager:   txManager,
-		RefreshTTL:  RefreshTTL,
-		AccessTTL:   AccessTTL,
+		refreshTTL:  RefreshTTL,
+		accessTTL:   AccessTTL,
 		secret:      secret,
 		log:         log,
 	}
@@ -55,16 +57,16 @@ func (s *TokenService) GenerateTokens(ctx context.Context, user *models.User) (*
 	accessID := uuid.New()
 	refreshID := uuid.New()
 
-	accessExp := issuedAt.Add(s.AccessTTL)
-	refreshExp := issuedAt.Add(s.RefreshTTL)
+	accessExp := issuedAt.Add(s.accessTTL)
+	refreshExp := issuedAt.Add(s.refreshTTL)
 
-	accessClaims := NewAccessClaim(user, issuedAt, s.AccessTTL, accessID)
+	accessClaims := NewAccessClaim(user, issuedAt, s.accessTTL, accessID)
 	accessToken, err := s.signClaims(accessClaims)
 	if err != nil {
 		return nil, wrap.Error(ctx, err)
 	}
 
-	refreshClaims := NewRefreshClaim(user, issuedAt, s.RefreshTTL, refreshID)
+	refreshClaims := NewRefreshClaim(user, issuedAt, s.refreshTTL, refreshID)
 	refreshToken, err := s.signClaims(refreshClaims)
 	if err != nil {
 		return nil, wrap.Error(ctx, err)
