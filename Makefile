@@ -41,5 +41,11 @@ down:
 nuke:
 	docker-compose down -v
 
-driver:
+run-driver:
 	go run main.go --mode=driver-service
+
+run-admin:
+	go run main.go --mode=admin-service
+
+run-auth:
+	go run main.go --mode=auth-service

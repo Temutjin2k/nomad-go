@@ -7,8 +7,10 @@ import (
 	"net/http"
 )
 
+// envelope is an alias for a map used to wrap JSON responses.
 type envelope map[string]any
 
+// errorResponse is a helper method for sending JSON-formatted error responses.
 func errorResponse(w http.ResponseWriter, status int, message any) {
 	env := envelope{"error": message}
 
@@ -20,6 +22,7 @@ func errorResponse(w http.ResponseWriter, status int, message any) {
 	}
 }
 
+// writeJSON writes the given data as JSON into the response body.
 func writeJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
 	js, err := json.Marshal(data)
 	if err != nil {

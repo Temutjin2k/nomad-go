@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	t "github.com/Temutjin2k/ride-hail-system/internal/domain/types"
+	authSvc "github.com/Temutjin2k/ride-hail-system/internal/service/auth"
 )
 
 type envelope map[string]any
@@ -97,8 +98,12 @@ func GetCode(err error) int {
 		return http.StatusBadRequest
 	case IsOneOf(err, t.ErrUserNotFound):
 		return http.StatusNotFound
-	case IsOneOf(err, t.ErrLicenseAlreadyExists, t.ErrDriverRegistered, t.ErrDriverAlreadyOnline):
+	case IsOneOf(err, t.ErrLicenseAlreadyExists, t.ErrDriverRegistered, t.ErrDriverAlreadyOnline, authSvc.ErrNotUniqueEmail):
 		return http.StatusConflict
+	case IsOneOf(err, authSvc.ErrInvalidCredentials, authSvc.ErrInvalidToken, authSvc.ErrExpToken):
+		return http.StatusUnauthorized
+	case IsOneOf(err, authSvc.ErrCannotCreateAdmin):
+		return http.StatusForbidden
 	default:
 		return http.StatusInternalServerError
 	}

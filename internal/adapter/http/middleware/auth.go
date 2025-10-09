@@ -23,8 +23,7 @@ func (h *Middleware) Auth(next http.Handler) http.Handler {
 		// anonymous user can access only public endpoints
 		// protected endpoints should return 401
 		if header == "" {
-			r = r.WithContext(models.WithUser(ctx, models.AnonymousUser()))
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r.WithContext(models.WithUser(ctx, models.AnonymousUser())))
 			return
 		}
 
@@ -41,13 +40,14 @@ func (h *Middleware) Auth(next http.Handler) http.Handler {
 			errorResponse(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
+		ctx = wrap.WithUserID(ctx, user.ID.String())
 
 		next.ServeHTTP(w, r.WithContext(models.WithUser(ctx, user)))
 	})
 }
 
 // RequireRoles wraps a handler and allows only users with one of the given roles.
-// Usage: mux.Handle("/admin", h.RequireRoles(h.AuthMiddleware(adminHandler), types.RoleAdmin.String()))
+// a.mux.Handle("GET /admin/overview", a.m.RequireRoles(a.routes.admin.GetOverview, types.RoleAdmin))
 func (h *Middleware) RequireRoles(next http.HandlerFunc, allowedRoles ...types.UserRole) http.Handler {
 	allowed := make(map[types.UserRole]struct{}, len(allowedRoles))
 	for _, r := range allowedRoles {
@@ -59,8 +59,11 @@ func (h *Middleware) RequireRoles(next http.HandlerFunc, allowedRoles ...types.U
 			errorResponse(w, http.StatusUnauthorized, "authorization required")
 			return
 		}
+
+		// Check if user's role is in the allowed list
 		if len(allowed) > 0 {
 			if _, ok := allowed[types.UserRole(user.Role)]; !ok {
+				h.log.Warn(wrap.WithUserID(r.Context(), user.ID.String()), "user with insufficient role tried to access protected resource")
 				errorResponse(w, http.StatusForbidden, "forbidden: insufficient role")
 				return
 			}

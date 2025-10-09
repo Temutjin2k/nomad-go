@@ -43,7 +43,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*model
 	}
 
 	// Генерируем токены
-	tokens, err := s.tokenService.GenerateTokens(user)
+	tokens, err := s.tokenService.GenerateTokens(ctx, user)
 	if err != nil {
 		return nil, ErrTokenGenerateFail
 	}
@@ -85,11 +85,16 @@ func (s *AuthService) Register(ctx context.Context, user *models.UserCreateReque
 	return id, nil
 }
 
+// RoleCheck verifies the access token and returns the associated user if valid.
 func (s *AuthService) RoleCheck(ctx context.Context, token string) (*models.User, error) {
-	// Валидируем его
-	claim, err := s.tokenService.Validate(token)
+	ctx = wrap.WithAction(ctx, "role_check")
+	claim, err := s.tokenService.Validate(ctx, token)
 	if err != nil {
-		return nil, err
+		return nil, wrap.Error(ctx, err)
+	}
+
+	if claim.TokenType != models.AccessToken {
+		return nil, wrap.Error(ctx, ErrInvalidToken)
 	}
 
 	// Проверяем существует ли пользователь
@@ -99,8 +104,12 @@ func (s *AuthService) RoleCheck(ctx context.Context, token string) (*models.User
 	}
 
 	if user == nil {
-		return nil, ErrUserWithEmailNotFound
+		return nil, wrap.Error(ctx, ErrUserWithEmailNotFound)
 	}
 
 	return user, nil
+}
+
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*models.TokenPair, error) {
+	return s.tokenService.Refresh(ctx, refreshToken)
 }

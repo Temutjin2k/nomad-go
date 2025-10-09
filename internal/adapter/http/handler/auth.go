@@ -15,6 +15,7 @@ import (
 type AuthService interface {
 	Register(ctx context.Context, newUser *models.UserCreateRequest) (uuid.UUID, error)
 	Login(ctx context.Context, email, password string) (*models.TokenPair, error)
+	Refresh(ctx context.Context, refreshToken string) (*models.TokenPair, error)
 	RoleCheck(ctx context.Context, token string) (*models.User, error)
 }
 
@@ -81,6 +82,40 @@ func (h *Auth) Login(w http.ResponseWriter, r *http.Request) {
 	tokens, err := h.auth.Login(ctx, req.Email, req.Password)
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to login user", err)
+		errorResponse(w, GetCode(err), err.Error())
+		return
+	}
+
+	response := envelope{
+		"access_token":  tokens.AccessToken,
+		"refresh_token": tokens.RefreshToken,
+	}
+
+	if err := writeJSON(w, http.StatusOK, response, nil); err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write JSON response", err)
+		errorResponse(w, http.StatusInternalServerError, "failed to write JSON response")
+	}
+}
+
+func (h *Auth) Refresh(w http.ResponseWriter, r *http.Request) {
+	ctx := wrap.WithAction(r.Context(), "refresh_token")
+
+	req := &dto.RefreshTokenRequest{}
+	if err := readJSON(w, r, req); err != nil {
+		badRequestResponse(w, err.Error())
+		return
+	}
+
+	v := validator.New()
+	dto.ValidateRefreshToken(v, req)
+	if !v.Valid() {
+		failedValidationResponse(w, v.Errors)
+		return
+	}
+
+	tokens, err := h.auth.Refresh(ctx, req.RefreshToken)
+	if err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to refresh token pair", err)
 		errorResponse(w, GetCode(err), err.Error())
 		return
 	}

@@ -24,6 +24,10 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 func ValidateNewUser(v *validator.Validator, user *RegisterUserRequest) {
 	v.Check(user.Name != "", "name", "must be provided")
 	v.Check(len(user.Name) <= 500, "name", "must not be more than 500 bytes long")
@@ -40,4 +44,8 @@ func ValidateNewUser(v *validator.Validator, user *RegisterUserRequest) {
 func ValidateLogin(v *validator.Validator, user *LoginRequest) {
 	v.Check(user.Email != "", "email", "must be provided")
 	v.Check(user.Password != "", "password", "must be provided")
+}
+
+func ValidateRefreshToken(v *validator.Validator, req *RefreshTokenRequest) {
+	v.Check(req.RefreshToken != "", "refresh_token", "must be provided")
 }
