@@ -14,7 +14,13 @@ type UserRepo interface {
 }
 
 type TokenProvider interface {
-	GenerateTokens(user *models.User) (*models.TokenPair, error)
-	Refresh(refreshToken string) (*models.TokenPair, error)
-	Validate(token string) (*models.CustomClaims, error)
+	GenerateTokens(ctx context.Context, user *models.User) (*models.TokenPair, error)
+	Refresh(ctx context.Context, refreshToken string) (*models.TokenPair, error)
+	Validate(ctx context.Context, token string) (*models.CustomClaims, error)
+}
+
+type RefreshTokenRepo interface {
+	Save(ctx context.Context, record *models.RefreshTokenRecord) error
+	Get(ctx context.Context, tokenID uuid.UUID) (*models.RefreshTokenRecord, error)
+	MarkUsed(ctx context.Context, tokenID uuid.UUID) error
 }

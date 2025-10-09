@@ -41,6 +41,7 @@ func (h *Middleware) Auth(next http.Handler) http.Handler {
 			errorResponse(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
+		ctx = wrap.WithUserID(ctx, user.ID.String())
 
 		next.ServeHTTP(w, r.WithContext(models.WithUser(ctx, user)))
 	})
@@ -61,6 +62,7 @@ func (h *Middleware) RequireRoles(next http.HandlerFunc, allowedRoles ...types.U
 		}
 		if len(allowed) > 0 {
 			if _, ok := allowed[types.UserRole(user.Role)]; !ok {
+				h.log.Warn(wrap.WithUserID(r.Context(), user.ID.String()), "user with insufficient role tried to access protected resource")
 				errorResponse(w, http.StatusForbidden, "forbidden: insufficient role")
 				return
 			}

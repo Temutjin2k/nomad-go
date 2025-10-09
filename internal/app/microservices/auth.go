@@ -13,6 +13,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	postgresclient "github.com/Temutjin2k/ride-hail-system/pkg/postgres"
+	"github.com/Temutjin2k/ride-hail-system/pkg/trm"
 )
 
 type AuthService struct {
@@ -31,9 +32,11 @@ func NewAuth(ctx context.Context, cfg config.Config, log logger.Logger) (*AdminS
 
 	// repositories
 	userRepo := postgres.NewUserRepo(db.Pool)
+	refreshTokenRepo := postgres.NewRefreshTokenRepo(db.Pool)
 
 	// services
-	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, cfg.Auth.AccessTokenTTL, cfg.Auth.RefreshTokenTTL, log)
+	txManager := trm.New(db.Pool)
+	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, txManager, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authSvc := auth.NewAuthService(userRepo, tokenSvc, log)
 
 	server, err := httpserver.New(cfg, nil, nil, authSvc, log)

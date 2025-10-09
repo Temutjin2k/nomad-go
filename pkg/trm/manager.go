@@ -12,6 +12,8 @@ type TxManager interface {
 	Do(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
+// Manager implements a transaction manager using pgx
+// It provides methods to execute functions within a transaction context.
 type Manager struct {
 	db *pgxpool.Pool
 }
@@ -46,7 +48,7 @@ func (m *Manager) Do(ctx context.Context, fn func(ctx context.Context) error) er
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 			return fmt.Errorf("failed to rollback tx: %w", rollbackErr)
 		}
-		return fmt.Errorf("failed to execute tx function: %w", err)
+		return err
 	}
 
 	// If no error, commit the transaction

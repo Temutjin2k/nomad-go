@@ -14,16 +14,16 @@ import (
 type UUID [16]byte
 
 // New возвращает новый UUID v4
-func New() (UUID, error) {
+func New() UUID {
 	var u UUID
 	if _, err := io.ReadFull(rand.Reader, u[:]); err != nil {
-		return UUID{}, err
+		return UUID{}
 	}
 	// версия (4)
 	u[6] = (u[6] & 0x0f) | 0x40
 	// вариант (RFC 4122)
 	u[8] = (u[8] & 0x3f) | 0x80
-	return u, nil
+	return u
 }
 
 // String форматирует UUID в XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
