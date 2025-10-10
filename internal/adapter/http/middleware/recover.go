@@ -5,12 +5,13 @@ import (
 	"net/http"
 )
 
-func (app *Middleware) Recover(next http.Handler) http.Handler {
+func (a *Middleware) Recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if panic := recover(); panic != nil {
+				a.log.Error(r.Context(), "panic occured in http server", fmt.Errorf("%s", panic), "action", "http_panic", "panic", panic)
 				w.Header().Set("Connection", "close")
-				errorResponse(w, http.StatusInternalServerError, fmt.Errorf("%s", panic))
+				errorResponse(w, http.StatusInternalServerError, "the server encountered a problem and could not process your request")
 			}
 		}()
 

@@ -26,8 +26,8 @@ func (a *API) setupRoutes() {
 
 // setupAdminRoutes setups routes for admin service
 func (a *API) setupAdminRoutes() {
-	a.mux.Handle("GET /admin/overview", a.m.RequireRoles(a.routes.admin.GetOverview, types.RoleAdmin))     // Get system metrics overview
-	a.mux.Handle("GET /admin/rides/active", a.m.RequireRoles(a.routes.admin.GetOverview, types.RoleAdmin)) // Get list of active rides
+	a.mux.Handle("GET /admin/overview", a.m.RequireRoles(a.routes.admin.GetOverview, types.RoleAdmin))        // Get system metrics overview
+	a.mux.Handle("GET /admin/rides/active", a.m.RequireRoles(a.routes.admin.GetActiveRides, types.RoleAdmin)) // Get list of active rides
 }
 
 // setupRideRoutes setups routes for ride service

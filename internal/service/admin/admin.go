@@ -19,7 +19,7 @@ func NewAdminService(adminRepo AdminRepository, l logger.Logger) *AdminService {
 	}
 }
 
-func (s *AdminService) GetOverview(ctx context.Context) (any, error) {
+func (s *AdminService) GetOverview(ctx context.Context) (*models.OverviewResponse, error) {
 	return s.adminRepo.GetOverview(ctx)
 }
 
