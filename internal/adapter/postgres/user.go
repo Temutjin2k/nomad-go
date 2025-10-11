@@ -5,9 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
+	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
+	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -142,4 +146,30 @@ func (r *UserRepo) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User,
 		_ = json.Unmarshal(attrsJSON, &u.Attrs)
 	}
 	return &u, nil
+}
+
+func (r *UserRepo) ChangeRole(ctx context.Context, userID uuid.UUID, new types.UserRole) (old types.UserRole, err error) {
+	const op = "UserRepo.ChangeRole"
+	query := `
+		WITH old AS (
+			SELECT id, role FROM users
+			WHERE id = $1
+		)
+
+		UPDATE users
+		SET role = $2, updated_at = now()
+		FROM old
+		WHERE users.id = old.id
+		RETURNING old.role;`
+
+	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, userID, new).Scan(&old); err != nil {
+		if err == pgx.ErrNoRows {
+			return "", types.ErrUserNotFound
+		}
+
+		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
+		return "", wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
+	}
+
+	return old, nil
 }

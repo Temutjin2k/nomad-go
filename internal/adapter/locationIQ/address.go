@@ -31,8 +31,6 @@ func (c *LocationIQClient) GetAddress(ctx context.Context, longitude, latitude f
 
 	url := fmt.Sprintf("%s/v1/reverse?key=%s&lat=%f&lon=%f&format=json", domain, c.apiKey, latitude, longitude)
 
-	fmt.Println(url)
-
 	resp, err := http.Get(url)
 	if err != nil {
 		ctx = wrap.WithAction(ctx, types.ActionExternalServiceFailed)
