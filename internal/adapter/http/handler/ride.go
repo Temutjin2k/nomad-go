@@ -55,7 +55,6 @@ func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Вызываем сервис и ПОЛУЧАЕМ созданную модель
     createdRide, err := h.ride.Create(ctx, domainModel)
     if err != nil {
         h.l.Error(wrap.ErrorCtx(ctx, err), "failed to create ride", err)
@@ -72,7 +71,6 @@ func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
 			"estimated_distance_km": createdRide.EstimatedDistanceKm,
 		}
 
-
     if err := writeJSON(w, http.StatusCreated, response, nil); err != nil {
         h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write response", err)
         internalErrorResponse(w, err.Error())
@@ -81,8 +79,7 @@ func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
 
 func (h *Ride) CancelRide(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "cancel_ride")
-    
-	// 1. Извлекаем ID из URL. Для Go 1.22+ это r.PathValue("ride_id")
+
 	rideIDstr := r.PathValue("ride_id") 
 	rideID, err := uuid.Parse(rideIDstr)
 	if err != nil {
