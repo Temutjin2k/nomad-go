@@ -7,15 +7,13 @@ import (
 	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
+	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 )
 
 const (
 	averageSpeedKmh = 50 // средняя скорость в пути
-	earthRadiusKm = 6371
-	
+	earthRadiusKm = 6371	
 )
-
-
 
 // вычисление расстояние между двумя координатами, используя формулу гаверсинусов
 func calculateDistance(p1, p2 models.Location) float64 {
@@ -75,13 +73,12 @@ func calculateFare(rideType string, distanceKm float64, durationMin int) float64
 }
 
 // создать уникальный номер поездки
-func generateRideNumber(ctx context.Context, repo RideRepo) (string, error) {
-	// TODO: сделать с repo.CountByDate()
+func (s *RideService) generateRideNumber(ctx context.Context) (string, error) {
 	datePart := time.Now().Format("20060102")
 	
-	count, err := repo.CountByDate(ctx, time.Now())
+	count, err := s.repo.CountByDate(ctx, time.Now())
 	if err != nil {
-		return "", err
+		return "", wrap.Error(ctx, err)
 	}
 	
 	nextSequence := count + 1

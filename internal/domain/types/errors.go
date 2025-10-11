@@ -11,4 +11,5 @@ var (
 
 	ErrRideCannotBeCancelled = errors.New("ride cannot be cancelled")
 	ErrRideNotFound = errors.New("ride not found")
+	ErrNotFound = errors.New("requested item not found")
 )
