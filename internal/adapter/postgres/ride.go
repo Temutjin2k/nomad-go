@@ -42,8 +42,8 @@ func (r *RideRepository) Create(ctx context.Context, ride *models.Ride) (*models
 	}
 
 	rideQuery := `INSERT INTO rides (ride_number, passenger_id, vehicle_type, status, estimated_fare, 
-                                     pickup_coordinate_id, destination_coordinate_id)
-                  VALUES ($1, $2, $3, $4, $5, $6, $7)
+                                     pickup_coordinate_id, destination_coordinate_id, priority )
+                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                   RETURNING id, created_at;`
 
 	err = q.QueryRow(ctx, rideQuery, ride.RideNumber, ride.PassengerID, ride.RideType, ride.Status, ride.EstimatedFare, pickupCoordID, destCoordID).Scan(&ride.ID, &ride.CreatedAt)

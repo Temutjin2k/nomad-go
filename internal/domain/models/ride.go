@@ -50,6 +50,7 @@ type Ride struct {
     EstimatedFare        float64
     EstimatedDurationMin int
     EstimatedDistanceKm  float64
+    Priority             int
 
     // Финальная стоимость. 
     FinalFare *float64

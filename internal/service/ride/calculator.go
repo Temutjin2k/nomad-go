@@ -84,3 +84,29 @@ func (s *RideService) generateRideNumber(ctx context.Context) (string, error) {
 	nextSequence := count + 1
 	return fmt.Sprintf("RIDE_%s_%03d", datePart, nextSequence), nil
 }
+
+func calculatePriority(ride *models.Ride) int {
+	priority := 1
+
+	// Правило №1: Час пик
+	// Увеличиваем приоритет утром (7-10) и вечером (17-20).
+	currentHour := time.Now().Hour()
+	if (currentHour >= 7 && currentHour < 10) || (currentHour >= 17 && currentHour < 20) {
+		priority += 3
+	}
+
+	// Правило №2: Тип поездки
+	// Более дорогие поездки получают небольшой бонус.
+	if ride.RideType == "PREMIUM" || ride.RideType == "XL" {
+		priority += 2
+	}
+
+	// Правило №3 (на будущее): Статус пассажира
+	// Если бы у нас была система ролей с подписками по типу VIP, VIP++, SSS ранг, то давали бы доп приоритет
+
+	if priority > 10 {
+		priority = 10
+	}
+
+	return priority
+}

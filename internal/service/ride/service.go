@@ -19,10 +19,11 @@ type RideService struct {
 	trm    trm.TxManager
 }
 
-func NewRideService(repo RideRepo, logger logger.Logger) *RideService {
+func NewRideService(repo RideRepo, logger logger.Logger, trm trm.TxManager) *RideService {
 	return &RideService{
 		repo: repo,
 		logger: logger,
+		trm: trm,
 	}
 }
 
@@ -35,16 +36,18 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		distance := calculateDistance(ride.Pickup, ride.Destination) 
 		duration := calculateDuration(distance) 
     fare := calculateFare(ride.RideType, distance, duration) 
+		priority := calculatePriority(ride) 
 		rideNumber, err := s.generateRideNumber(ctx)
 		if err != nil {
 			return wrap.Error(ctx, fmt.Errorf("could not generate ride number: %w", err))
 		}
 
 		ride.EstimatedDistanceKm = distance
-        ride.EstimatedDurationMin = duration
-        ride.EstimatedFare = fare
-        ride.RideNumber = rideNumber
-        ride.Status = "REQUESTED"
+		ride.EstimatedDurationMin = duration
+		ride.EstimatedFare = fare
+		ride.RideNumber = rideNumber
+		ride.Status = "REQUESTED"
+		ride.Priority = priority
 				
 		createRide, err = s.repo.Create(ctx, ride)
 		if err != nil {
