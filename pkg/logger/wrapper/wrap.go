@@ -17,7 +17,6 @@ func Error(ctx context.Context, err error) error {
 		if x, ok := ctx.Value(LogCtxKey).(LogCtx); ok {
 			e.logCtx = x
 		}
-		e.err = err
 		return e
 	}
 

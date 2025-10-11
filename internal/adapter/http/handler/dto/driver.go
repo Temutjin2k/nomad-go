@@ -62,12 +62,12 @@ func (r *RegisterDriverRequest) ToModel() *models.Driver {
 	}
 }
 
-type LocationUpdateReq struct {
+type CoordinateUpdateReq struct {
 	Latitude  *float64 `json:"latitude"`
 	Longitude *float64 `json:"longitude"`
 }
 
-func (r *LocationUpdateReq) Validate(v *validator.Validator) {
+func (r *CoordinateUpdateReq) Validate(v *validator.Validator) {
 	if r.Latitude != nil && r.Longitude != nil {
 		v.Check(*r.Latitude >= -90 && *r.Latitude <= 90, "latitude", "must be between -90 and 90")
 		v.Check(*r.Longitude >= -180 && *r.Latitude <= 180, "longitude", "must be between -90 and 90")
@@ -75,4 +75,14 @@ func (r *LocationUpdateReq) Validate(v *validator.Validator) {
 		v.Check(r.Latitude != nil, "latitude", "must be provided")
 		v.Check(r.Longitude != nil, "longitude", "must be provided")
 	}
+}
+
+type StartRideReq struct {
+	RideID         uuid.UUID           `json:"ride_id"`
+	DriverLocation CoordinateUpdateReq `json:"driver_location"`
+}
+
+func (r *StartRideReq) Validate(v *validator.Validator) {
+	v.Check(r.RideID != uuid.UUID{}, "ride_id", "must be provided")
+	r.DriverLocation.Validate(v)
 }

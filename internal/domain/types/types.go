@@ -64,3 +64,15 @@ const (
 	Driver    EntityType = "driver"
 	Passenger EntityType = "passenger"
 )
+
+type RideStatus string
+
+const (
+	StatusRequested  = "REQUESTED"   // Ride has been requested by customer
+	StatusMatched    = "MATCHED"     // Driver has been matched to the ride
+	StatusEnRoute    = "EN_ROUTE"    // Driver is on the way to pickup location
+	StatusArrived    = "ARRIVED"     // Driver has arrived at pickup location
+	StatusInProgress = "IN_PROGRESS" // Ride is currently in progress
+	StatusCompleted  = "COMPLETED"   // Ride has been successfully completed
+	StatusCancelled  = "CANCELLED"   // Ride was cancelled
+)

@@ -10,15 +10,20 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/server"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/locationIQ"
 	repo "github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
+	publisher "github.com/Temutjin2k/ride-hail-system/internal/adapter/rabbit"
+	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
 	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver.go"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	"github.com/Temutjin2k/ride-hail-system/pkg/postgres"
+	"github.com/Temutjin2k/ride-hail-system/pkg/rabbit"
+
 	"github.com/Temutjin2k/ride-hail-system/pkg/trm"
 )
 
 type DriverService struct {
 	postgresDB *postgres.PostgreDB
 	httpServer *server.API
+	rabbitMQ   *rabbit.RabbitMQ
 	cfg        config.Config
 	log        logger.Logger
 }
@@ -30,19 +35,34 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 		return nil, err
 	}
 
+	rabbitMq, err := rabbit.New(ctx, cfg.RabbitMQ.GetDSN(), log)
+	if err != nil {
+		log.Error(ctx, "Failed to setup rabbitmq", err)
+		return nil, err
+	}
+
 	// Repo adapters
 	trm := trm.New(postgresDB.Pool)
 	driverRepo := repo.NewDriverRepo(postgresDB.Pool)
 	sessionRepo := repo.NewSessionRepo(postgresDB.Pool)
 	coordinateRepo := repo.NewCoordinateRepo(postgresDB.Pool)
+	userRepo := repo.NewUserRepo(postgresDB.Pool)
+	rideRepo := repo.NewRideRepo(postgresDB.Pool)
+	refreshTokenRepo := repo.NewRefreshTokenRepo(postgresDB.Pool)
+
+	// Message Broker publisher
+	driverProducer := publisher.NewDriverProducer(rabbitMq)
 
 	// External API client
 	locationIQclient := locationIQ.New(cfg.ExternalAPIConfig.LocationIQapiKey)
 
 	// Main Service
-	driverService := drivergo.New(driverRepo, sessionRepo, coordinateRepo, locationIQclient, trm, log)
+	driverService := drivergo.New(driverRepo, sessionRepo, coordinateRepo, userRepo, rideRepo, locationIQclient, driverProducer, trm, log)
 
-	httpServer, err := server.New(cfg, driverService, nil, nil, log)
+	tokenService := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
+	authService := auth.NewAuthService(userRepo, tokenService, log)
+
+	httpServer, err := server.New(cfg, driverService, nil, authService, log)
 	if err != nil {
 		log.Error(ctx, "Failed to setup http server", err)
 		return nil, err
@@ -51,6 +71,7 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 	return &DriverService{
 		httpServer: httpServer,
 		postgresDB: postgresDB,
+		rabbitMQ:   rabbitMq,
 		cfg:        cfg,
 		log:        log,
 	}, nil
@@ -89,5 +110,9 @@ func (s *DriverService) close(ctx context.Context) {
 
 	if s.postgresDB != nil && s.postgresDB.Pool != nil {
 		s.postgresDB.Pool.Close()
+	}
+
+	if s.rabbitMQ != nil && s.rabbitMQ.Conn != nil {
+		s.rabbitMQ.Conn.Close()
 	}
 }

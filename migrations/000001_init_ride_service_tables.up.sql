@@ -134,7 +134,7 @@ Example event_data field:
   "old_status": "requested",
   "new_status": "matched",
   "driver_id": "550e8400-e29b-41d4-a716-446655440001",
-  "location": {"lat": 43.238949, "lng": 76.889709},
+  "location": {"latitude": 43.238949, "longitude": 76.889709},
   "estimated_arrival": "2024-12-16T10:35:00Z"
 }
 */
