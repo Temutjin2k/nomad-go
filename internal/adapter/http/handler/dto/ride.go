@@ -3,6 +3,7 @@ package dto
 import (
 	"time"
 
+	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
 )
@@ -72,4 +73,26 @@ type CancelRideResponse struct {
 	Status      string    `json:"status"`
 	CancelledAt time.Time `json:"cancelled_at"`
 	Message     string    `json:"message"`
+}
+
+func (r *CreateRideRequest) ToModel() (*models.Ride, error) {
+	passengerUUID, err := uuid.Parse(r.PassengerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.Ride{
+		PassengerID: passengerUUID,
+		RideType:    r.RideType,
+		Pickup: models.Location{
+			Latitude:  r.PickupLatitude,
+			Longitude: r.PickupLongitude,
+			Address:   r.PickupAddress,
+		},
+		Destination: models.Location{
+			Latitude:  r.DestinationLatitude,
+			Longitude: r.DestinationLongitude,
+			Address:   r.DestinationAddress,
+		},
+	}, nil
 }
