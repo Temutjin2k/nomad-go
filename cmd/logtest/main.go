@@ -4,18 +4,12 @@ import (
 	"context"
 	"errors"
 
-	l "github.com/Temutjin2k/ride-hail-system/pkg/logger"
+	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 )
 
 func main() {
-	lg := l.InitLogger("test", l.LevelDebug)
-
-	ctx := context.Background()
-
-	if err := SomeLogic(ctx); err != nil {
-		lg.Error(wrap.ErrorCtx(ctx, err), "error occured", err)
-	}
+	logger.Example()
 }
 
 func SomeLogic(ctx context.Context) error {

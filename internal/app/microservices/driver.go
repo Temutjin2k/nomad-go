@@ -10,7 +10,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/server"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/locationIQ"
 	repo "github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
-	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver.go"
+	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	"github.com/Temutjin2k/ride-hail-system/pkg/postgres"
 	"github.com/Temutjin2k/ride-hail-system/pkg/trm"
