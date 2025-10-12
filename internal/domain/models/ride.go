@@ -104,4 +104,5 @@ type RideStatusUpdateMessage struct {
 	Timestamp     time.Time  `json:"timestamp"`
 	DriverID      *uuid.UUID `json:"driver_id,omitempty"`
 	CorrelationID string     `json:"correlation_id"`
+	FinalFare int `json:"final_fare"`
 }

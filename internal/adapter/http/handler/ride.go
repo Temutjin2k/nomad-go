@@ -15,7 +15,7 @@ import (
 type RideService interface {
     Create(ctx context.Context, ride *models.Ride) (*models.Ride, error) 
     Cancel(ctx context.Context, rideID uuid.UUID, reason string) (*models.Ride, error)
-    FindByID(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
+    Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
 }
 
 type Ride struct {

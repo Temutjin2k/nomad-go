@@ -12,18 +12,19 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
+	"github.com/Temutjin2k/ride-hail-system/pkg/postgres"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 )
 
-type RideRepository struct {
+type RideRepo struct {
 	db *pgxpool.Pool
 }
 
-func NewRideRepository(db *pgxpool.Pool) *RideRepository {
-	return &RideRepository{db: db}
+func NewRideRepo(db *pgxpool.Pool) *RideRepo {
+	return &RideRepo{db: db}
 }
 
-func (r *RideRepository) Create(ctx context.Context, ride *models.Ride) (*models.Ride, error) {
+func (r *RideRepo) Create(ctx context.Context, ride *models.Ride) (*models.Ride, error) {
 	q := TxorDB(ctx, r.db)
 
 	var pickupCoordID uuid.UUID
@@ -54,7 +55,7 @@ func (r *RideRepository) Create(ctx context.Context, ride *models.Ride) (*models
 	return ride, nil
 }
 
-func (r *RideRepository) CountByDate(ctx context.Context, date time.Time) (int, error) {
+func (r *RideRepo) CountByDate(ctx context.Context, date time.Time) (int, error) {
     q := TxorDB(ctx, r.db) 
 
 	var count int
@@ -67,7 +68,7 @@ func (r *RideRepository) CountByDate(ctx context.Context, date time.Time) (int, 
 	return count, nil
 }
 
-func (r *RideRepository) FindByID(ctx context.Context, rideID uuid.UUID) (*models.Ride, error) {
+func (r *RideRepo) Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error) {
     q := TxorDB(ctx, r.db)
 
     var ride models.Ride
@@ -97,13 +98,13 @@ func (r *RideRepository) FindByID(ctx context.Context, rideID uuid.UUID) (*model
         if errors.Is(err, pgx.ErrNoRows) {
             return nil, wrap.Error(ctx, types.ErrNotFound) 
         }
-        return nil, wrap.Error(ctx, fmt.Errorf("Ride repo: FindByID: %w", err))
+        return nil, wrap.Error(ctx, fmt.Errorf("Ride repo: Get: %w", err))
     }
 
     return &ride, nil
 }
 
-func (r *RideRepository) Update(ctx context.Context, ride *models.Ride) error {
+func (r *RideRepo) Update(ctx context.Context, ride *models.Ride) error {
     q := TxorDB(ctx, r.db)
 
     query := `
@@ -145,7 +146,7 @@ func (r *RideRepository) Update(ctx context.Context, ride *models.Ride) error {
     return nil
 }
 
-func (r *RideRepository) StartRide(ctx context.Context, rideID, driverID uuid.UUID, startedAt time.Time, rideEvent models.RideEvent) error {
+func (r *RideRepo) StartRide(ctx context.Context, rideID, driverID uuid.UUID, startedAt time.Time, rideEvent models.RideEvent) error {
 	const op = "RideRepo.StartRide"
 
 	// Update the ride status to 'IN_PROGRESS' and set the started_at timestamp

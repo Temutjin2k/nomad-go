@@ -99,7 +99,7 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 	var cancelledRide *models.Ride
 
 	err := s.trm.Do(ctx, func(ctx context.Context) error {
-		ride, err := s.repo.FindByID(ctx, rideID)
+		ride, err := s.repo.Get(ctx, rideID)
 		if err != nil {
 			if errors.Is(err, types.ErrNotFound) {
 				return wrap.Error(ctx,types.ErrRideNotFound)
