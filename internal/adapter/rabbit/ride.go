@@ -21,12 +21,12 @@ type RideMsgBroker struct {
 func NewRideMsgBroker(broker *rabbit.RabbitMQ) *RideMsgBroker {
 	return &RideMsgBroker{
 		broker:   broker,
-		exchange: "ride_topic", // Как указано в архитектуре
+		exchange: "ride_topic", // как указано в архитектуре
 	}
 }
 
 // публикует событие о новой поездке для поиска водителя.
-// Отправляет в exchange 'ride_topic' с ключом 'ride.request.{ride_type}'.
+// отправляет в exchange 'ride_topic' с ключом 'ride.request.{ride_type}'.
 func (r *RideMsgBroker) PublishRideRequested(ctx context.Context, msg models.RideRequestedMessage) error {
 	const op = "RideMsgBroker.PublishRideRequested"
 
@@ -36,7 +36,7 @@ func (r *RideMsgBroker) PublishRideRequested(ctx context.Context, msg models.Rid
 		return wrap.Error(ctx, fmt.Errorf("%s: failed to marshal message: %w", op, err))
 	}
 
-	// Ключ маршрутизации, например, "ride.request.ECONOMY"
+	// ключ маршрутизации, example, "ride.request.ECONOMY"
 	key := fmt.Sprintf("ride.request.%s", msg.RideType)
 
 	if err := r.broker.Channel.PublishWithContext(
@@ -60,7 +60,7 @@ func (r *RideMsgBroker) PublishRideRequested(ctx context.Context, msg models.Rid
 }
 
 // публикует событие об изменении статуса поездки.
-// Отправляет в exchange 'ride_topic' с ключом 'ride.status.{status}'.
+// отправляет в exchange 'ride_topic' с ключом 'ride.status.{status}'.
 func (r *RideMsgBroker) PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error {
 	const op = "RideMsgBroker.PublishRideStatus"
 
