@@ -2,6 +2,7 @@ package ride
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,26 +18,28 @@ type RideService struct {
 	repo   RideRepo
 	logger logger.Logger
 	trm    trm.TxManager
+	publisher RideMsgBroker
 }
 
-func NewRideService(repo RideRepo, logger logger.Logger, trm trm.TxManager) *RideService {
+func NewRideService(repo RideRepo, logger logger.Logger, trm trm.TxManager, publisher RideMsgBroker) *RideService {
 	return &RideService{
 		repo: repo,
 		logger: logger,
 		trm: trm,
+		publisher: publisher,
 	}
 }
 
-func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ride, error)  {
+func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ride, error) {
 	ctx = wrap.WithAction(ctx, "create_ride")
 
-	var createRide *models.Ride
+	var createdRide *models.Ride
 
 	err := s.trm.Do(ctx, func(ctx context.Context) error {
-		distance := calculateDistance(ride.Pickup, ride.Destination) 
-		duration := calculateDuration(distance) 
-    fare := calculateFare(ride.RideType, distance, duration) 
-		priority := calculatePriority(ride) 
+		distance := calculateDistance(ride.Pickup, ride.Destination)
+		duration := calculateDuration(distance)
+		fare := calculateFare(ride.RideType, distance, duration)
+		priority := calculatePriority(ride)
 		rideNumber, err := s.generateRideNumber(ctx)
 		if err != nil {
 			return wrap.Error(ctx, fmt.Errorf("could not generate ride number: %w", err))
@@ -48,8 +51,8 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		ride.RideNumber = rideNumber
 		ride.Status = "REQUESTED"
 		ride.Priority = priority
-				
-		createRide, err = s.repo.Create(ctx, ride)
+
+		createdRide, err = s.repo.Create(ctx, ride)
 		if err != nil {
 			return wrap.Error(ctx, fmt.Errorf("could not create ride in repo: %w", err))
 		}
@@ -61,45 +64,84 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		return nil, wrap.Error(ctx, err)
 	}
 
-	// TODO: добавить здесь публикацию в эксчейндж раббита
+	message := models.RideRequestedMessage{
+		RideID:     createdRide.ID,
+		RideNumber: createdRide.RideNumber,
+		PickupLocation: models.LocationMessage{
+			Lat:     createdRide.Pickup.Latitude,
+			Lng:     createdRide.Pickup.Longitude,
+			Address: createdRide.Pickup.Address,
+		},
+		DestinationLocation: models.LocationMessage{
+			Lat:     createdRide.Destination.Latitude,
+			Lng:     createdRide.Destination.Longitude,
+			Address: createdRide.Destination.Address,
+		},
+		RideType:       createdRide.RideType,
+		EstimatedFare:  createdRide.EstimatedFare,
+		MaxDistanceKm:  5.0, // Это чтобы не ожидать драйвера из какого нибудь Мадагаскара
+		TimeoutSeconds: 120, 
+		CorrelationID:  createdRide.RideNumber,
+	}
 
-	return createRide, nil
+	if err := s.publisher.PublishRideRequested(ctx, message); err != nil {
+		s.logger.Error(wrap.ErrorCtx(ctx, err), "critical: failed to publish ride requested event", err)
+	}
+
+	s.logger.Info(ctx, "ride created successfully", "ride_id", createdRide.ID)
+
+	return createdRide, nil
 }
 
 func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason string) (*models.Ride, error) {
 	ctx = wrap.WithAction(ctx, "cancel_ride")
 
-  var cancelledRide *models.Ride
-    
-    err := s.trm.Do(ctx, func(ctx context.Context) error {
-        ride, err := s.repo.FindByID(ctx, rideID)
-        if err != nil {
-            return wrap.Error(ctx, types.ErrRideNotFound)
-        }
+	var cancelledRide *models.Ride
 
-        if ride.Status == "COMPLETED" || ride.Status == "CANCELLED" { // Насчет IN_PROGRESS момент спорный
-            return wrap.Error(ctx, types.ErrRideCannotBeCancelled) 
-        }
+	err := s.trm.Do(ctx, func(ctx context.Context) error {
+		ride, err := s.repo.FindByID(ctx, rideID)
+		if err != nil {
+			if errors.Is(err, types.ErrNotFound) {
+				return wrap.Error(ctx,types.ErrRideNotFound)
+			}
+			return wrap.Error(ctx, fmt.Errorf("could not find ride by id: %w", err))
+		}
 
-        now := time.Now()	
-        ride.Status = "CANCELLED"
-        ride.CancellationReason = &reason
-        ride.CancelledAt = &now
-        
-        err = s.repo.Update(ctx, ride)
-        if err != nil {
-            return wrap.Error(ctx, fmt.Errorf("could not update ride: %w", err))
-        }
-        
-        cancelledRide = ride
-        return nil
-    })
-    
-    if err != nil {
-        return nil, err
-    }
+		if ride.Status == "COMPLETED" || ride.Status == "CANCELLED" {
+			return types.ErrRideCannotBeCancelled
+		}
 
-    // TODO: здесь тоже опубликовать в раббит нужно
-    
-    return cancelledRide, nil
+		now := time.Now()
+		ride.Status = "CANCELLED"
+		ride.CancellationReason = &reason
+		ride.CancelledAt = &now
+
+		err = s.repo.Update(ctx, ride)
+		if err != nil {
+			return wrap.Error(ctx, fmt.Errorf("could not update ride: %w", err))
+		}
+
+		cancelledRide = ride
+		return nil
+	})
+
+	if err != nil {
+		return nil, err 
+	}
+
+	message := models.RideStatusUpdateMessage{
+		RideID:        cancelledRide.ID,
+		Status:        cancelledRide.Status,
+		Timestamp:     *cancelledRide.CancelledAt,
+		DriverID:      cancelledRide.DriverID,
+		CorrelationID: cancelledRide.RideNumber,
+	}
+
+	if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
+		s.logger.Error(wrap.ErrorCtx(ctx, err), "critical: failed to publish ride cancelled event", err)
+	}
+
+	s.logger.Info(ctx, "ride cancelled successfully", "ride_id", cancelledRide.ID)
+
+	return cancelledRide, nil
 }

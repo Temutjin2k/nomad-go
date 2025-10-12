@@ -16,3 +16,8 @@ type RideRepo interface {
 	// для генерации уникального номера поездки (ride_number)
 	CountByDate(ctx context.Context, date time.Time) (int, error)
 }
+
+type RideMsgBroker interface {
+	PublishRideRequested(ctx context.Context, msg models.RideRequestedMessage) error
+	PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error
+}

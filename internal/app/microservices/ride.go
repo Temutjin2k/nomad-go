@@ -20,6 +20,8 @@ type RideService struct {
 	httpServer *httpserver.API
 	cfg        config.Config
 	log        logger.Logger
+	trm        trm.TxManager
+	publisher  ridego.RideMsgBroker
 }
 
 func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideService, error) {
@@ -32,10 +34,11 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 	trm := trm.New(postgresDB.Pool)
 	rideRepo := repo.NewRideRepository(postgresDB.Pool) 
 
+	// TODO: fix all of them
+	rideService := ridego.NewRideService(rideRepo, log, trm, nil) 
+	_ = rideService
 
-	rideService := ridego.NewRideService(rideRepo, log, trm) 
-
-	httpServer, err := httpserver.New(cfg, nil, nil, rideService, log)
+	httpServer, err := httpserver.New(cfg, nil, nil, nil, nil, log)
 	if err != nil {
 		log.Error(ctx, "Failed to setup http server", err)
 		return nil, err

@@ -8,12 +8,11 @@ import (
 
 	"github.com/rabbitmq/amqp091-go"
 
-	"github.com/Temutjin2k/ride-hail-system/internal/domain/models" // Вам нужно будет создать эти DTO
+	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/rabbit"
 )
 
-// RideMsgBroker инкапсулирует логику отправки сообщений, связанных с поездками.
 type RideMsgBroker struct {
 	broker   *rabbit.RabbitMQ
 	exchange string
@@ -26,7 +25,7 @@ func NewRideMsgBroker(broker *rabbit.RabbitMQ) *RideMsgBroker {
 	}
 }
 
-// PublishRideRequested публикует событие о новой поездке для поиска водителя.
+// публикует событие о новой поездке для поиска водителя.
 // Отправляет в exchange 'ride_topic' с ключом 'ride.request.{ride_type}'.
 func (r *RideMsgBroker) PublishRideRequested(ctx context.Context, msg models.RideRequestedMessage) error {
 	const op = "RideMsgBroker.PublishRideRequested"
@@ -48,7 +47,7 @@ func (r *RideMsgBroker) PublishRideRequested(ctx context.Context, msg models.Rid
 		false,      // immediate
 		amqp091.Publishing{
 			ContentType:   "application/json",
-			CorrelationId: msg.CorrelationID, // Важно для трассировки
+			CorrelationId: msg.CorrelationID, // для трассировки
 			Body:          body,
 			Timestamp:     time.Now(),
 		},
@@ -60,7 +59,7 @@ func (r *RideMsgBroker) PublishRideRequested(ctx context.Context, msg models.Rid
 	return nil
 }
 
-// PublishRideStatus публикует событие об изменении статуса поездки.
+// публикует событие об изменении статуса поездки.
 // Отправляет в exchange 'ride_topic' с ключом 'ride.status.{status}'.
 func (r *RideMsgBroker) PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error {
 	const op = "RideMsgBroker.PublishRideStatus"
