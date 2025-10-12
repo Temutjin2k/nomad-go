@@ -79,7 +79,7 @@ func (h *Driver) GoOnline(w http.ResponseWriter, r *http.Request) {
 		h.l.Warn(ctx, "invalid driver uuid format")
 		errorResponse(w, http.StatusBadRequest, "invalid driver uuid format")
 		return
-	}
+	}	
 
 	var goOnlineReq dto.CoordinateUpdateReq
 	if err := readJSON(w, r, &goOnlineReq); err != nil {
