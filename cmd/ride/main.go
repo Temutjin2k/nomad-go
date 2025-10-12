@@ -50,7 +50,7 @@ func Run() {
 	}
 
 	// Running the apllication
-	if err = app.Run(ctx); err != nil {
+	if err = app.R	un(ctx); err != nil {
 		log.Error(ctx, "failed to run application", err)
 		os.Exit(1)
 	}

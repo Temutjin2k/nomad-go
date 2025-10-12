@@ -66,3 +66,32 @@ type Ride struct {
     CompletedAt  *time.Time
     CancelledAt  *time.Time
 }
+
+
+/* ======================= rabbitmq ======================= */
+
+type LocationMessage struct {
+	Lat     float64 `json:"lat"`
+	Lng     float64 `json:"lng"`
+	Address string  `json:"address"`
+}
+
+type RideRequestedMessage struct {
+	RideID              uuid.UUID       `json:"ride_id"`
+	RideNumber          string          `json:"ride_number"`
+	PickupLocation      LocationMessage `json:"pickup_location"`
+	DestinationLocation LocationMessage `json:"destination_location"`
+	RideType            string          `json:"ride_type"`
+	EstimatedFare       float64         `json:"estimated_fare"`
+	MaxDistanceKm       float64         `json:"max_distance_km"`
+	TimeoutSeconds      int             `json:"timeout_seconds"`
+	CorrelationID       string          `json:"correlation_id"`
+}
+
+type RideStatusUpdateMessage struct {
+	RideID        uuid.UUID  `json:"ride_id"`
+	Status        string     `json:"status"`
+	Timestamp     time.Time  `json:"timestamp"`
+	DriverID      *uuid.UUID `json:"driver_id,omitempty"`
+	CorrelationID string     `json:"correlation_id"`
+}
