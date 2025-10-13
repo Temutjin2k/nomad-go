@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type DriverRepo struct {
@@ -118,7 +119,7 @@ func (r *DriverRepo) UpdateStats(ctx context.Context, driverID uuid.UUID, ridesC
 	return nil
 }
 
-func (r *DriverRepo) Get(ctx context.Context, driverID uuid.UUID) (models.Driver, error) {
+func (r *DriverRepo) Get(ctx context.Context, driverID uuid.UUID) (*models.Driver, error) {
 	const op = "DriverRepo.Get"
 	query := `
         SELECT id,
@@ -154,10 +155,10 @@ func (r *DriverRepo) Get(ctx context.Context, driverID uuid.UUID) (models.Driver
 
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return models.Driver{}, types.ErrUserNotFound
+			return nil, types.ErrUserNotFound
 		}
-		return models.Driver{}, wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
+		return nil, wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
 	}
 
-	return driver, nil
+	return &driver, nil
 }

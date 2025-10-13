@@ -1,4 +1,4 @@
 package models
 
-type Passanger struct {
+type Passenger struct {
 }

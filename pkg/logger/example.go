@@ -2,7 +2,6 @@ package logger
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
@@ -46,10 +45,11 @@ func someLogic(ctx context.Context) error {
 }
 
 func secondLogic(ctx context.Context) error {
-	// create a context with action field
-	ctx = wrap.WithAction(ctx, "secondLogic action")
+	// // create a context with action field
+	// ctx = wrap.WithAction(ctx, "secondLogic action")
 
-	err := errors.New("secondLogic example error")
-	// Wrap the error with the current context
-	return wrap.Error(ctx, err)
+	// err := errors.New("secondLogic example error")
+	// // Wrap the error with the current context
+	// return wrap.Error(ctx, err)
+	return nil
 }

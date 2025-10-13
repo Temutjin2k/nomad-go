@@ -17,4 +17,6 @@ var (
 	ErrRideNotFound           = errors.New("ride not found")
 	ErrRideNotArrived         = errors.New("ride status is not 'arrived'")
 	ErrRideDriverMismatch     = errors.New("ride does not belong to the driver")
+	ErrRideCannotBeCancelled = errors.New("ride cannot be cancelled")
+	ErrNotFound = errors.New("requested item not found")
 )

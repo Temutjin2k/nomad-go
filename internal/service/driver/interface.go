@@ -37,7 +37,7 @@ type DriverChecker interface {
 }
 
 type DriverGetter interface {
-	Get(ctx context.Context, driverID uuid.UUID) (models.Driver, error)
+	Get(ctx context.Context, driverID uuid.UUID) (*models.Driver, error)
 }
 
 /*=================Driver Session Repository======================*/
@@ -90,7 +90,7 @@ type RideStatusChanger interface {
 }
 
 type RideGetter interface {
-	Get(ctx context.Context, rideID uuid.UUID) (models.Ride, error)
+	Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
 }
 
 /*========================Publisher===============================*/
