@@ -96,9 +96,9 @@ func GetCode(err error) int {
 	switch {
 	case IsOneOf(err, t.ErrInvalidLicenseFormat):
 		return http.StatusBadRequest
-	case IsOneOf(err, t.ErrUserNotFound):
+	case IsOneOf(err, t.ErrUserNotFound, t.ErrSessionNotFound, t.ErrNoCoordinates, t.ErrRideNotFound, t.ErrDriverLocationNotFound):
 		return http.StatusNotFound
-	case IsOneOf(err, t.ErrLicenseAlreadyExists, t.ErrDriverRegistered, t.ErrDriverAlreadyOnline, authSvc.ErrNotUniqueEmail):
+	case IsOneOf(err, t.ErrLicenseAlreadyExists, t.ErrDriverRegistered, t.ErrDriverAlreadyOnline, t.ErrDriverAlreadyOffline, t.ErrDriverMustBeAvailable, authSvc.ErrNotUniqueEmail, t.ErrDriverAlreadyOnRide, t.ErrRideDriverMismatch, t.ErrRideNotArrived):
 		return http.StatusConflict
 	case IsOneOf(err, authSvc.ErrInvalidCredentials, authSvc.ErrInvalidToken, authSvc.ErrExpToken):
 		return http.StatusUnauthorized

@@ -46,7 +46,7 @@ func New(ctx context.Context, dsn string, log logger.Logger) (*RabbitMQ, error) 
 	select {
 	case closeErr := <-closeChan:
 		if closeErr != nil {
-			return nil, fmt.Errorf("rabbitmq connection is closed: %v", closeErr)
+			return nil, fmt.Errorf("rabbitmq connection is closed: %w", closeErr)
 		}
 		return nil, fmt.Errorf("rabbitmq connection is closed")
 	default:

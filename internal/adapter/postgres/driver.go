@@ -37,7 +37,7 @@ func (r *DriverRepo) Create(ctx context.Context, driver *models.Driver) error {
 		driver.Vehicle,
 	); err != nil {
 		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
-		return wrap.Error(ctx, fmt.Errorf("%s: %v", op, err))
+		return wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
 	}
 
 	return nil
@@ -55,7 +55,7 @@ func (r *DriverRepo) IsUnique(ctx context.Context, validLicenseNum string) (bool
 	var exist bool
 	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, validLicenseNum).Scan(&exist); err != nil {
 		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
-		return false, wrap.Error(ctx, fmt.Errorf("%s: %v", op, err))
+		return false, wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
 	}
 
 	return !exist, nil
@@ -64,19 +64,16 @@ func (r *DriverRepo) IsUnique(ctx context.Context, validLicenseNum string) (bool
 func (r *DriverRepo) IsDriverExist(ctx context.Context, id uuid.UUID) (bool, error) {
 	const op = "DriverRepo.IsDriverExist"
 	query := `
-		SELECT d.ID is NOT NULL as driverExistence 
-		FROM users u
-		LEFT JOIN drivers d ON d.id = u.id
-		WHERE u.id = $1 AND u.role =  $2;	
-	`
+		SELECT EXISTS(
+			SELECT 1 FROM users u
+			JOIN drivers d ON d.id = u.id
+			WHERE u.id = $1 AND u.role = $2
+		) AS driverExistence`
 
 	var exist bool
 	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, id, types.RoleDriver).Scan(&exist); err != nil {
-		if err == pgx.ErrNoRows {
-			return false, types.ErrUserNotFound
-		}
 		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
-		return false, wrap.Error(ctx, fmt.Errorf("%s: %v", op, err))
+		return false, wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
 	}
 
 	return exist, nil
@@ -91,15 +88,76 @@ func (r *DriverRepo) ChangeStatus(ctx context.Context, driverID uuid.UUID, newSt
     		WHERE id = $1
 		)
 		UPDATE drivers
-		SET status = $2
+		SET status = $2, updated_at = now()
 		FROM old
 		WHERE drivers.id = old.id
 		RETURNING old.status;`
 
 	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, driverID, newStatus).Scan(&oldStatus); err != nil {
 		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
-		return "", wrap.Error(ctx, fmt.Errorf("%s: %v", op, err))
+		return "", wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
 	}
 
 	return oldStatus, nil
+}
+
+func (r *DriverRepo) UpdateStats(ctx context.Context, driverID uuid.UUID, ridesCompleted int, earnings float64) error {
+	const op = "DriverRepo.UpdateStats"
+	query := `
+		UPDATE drivers
+		SET 
+			total_rides = total_rides + $1,
+		 	total_earnings = total_earnings + $2,
+			updated_at = now()
+		WHERE id = $3`
+
+	if _, err := TxorDB(ctx, r.db).Exec(ctx, query, ridesCompleted, earnings, driverID); err != nil {
+		return wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
+	}
+
+	return nil
+}
+
+func (r *DriverRepo) Get(ctx context.Context, driverID uuid.UUID) (models.Driver, error) {
+	const op = "DriverRepo.Get"
+	query := `
+        SELECT id,
+               name, 
+               created_at, 
+               updated_at, 
+               license_number, 
+               vehicle_type, 
+               vehicle_attrs, 
+               rating, 
+               total_rides, 
+               total_earnings, 
+               status, 
+               is_verified
+        FROM drivers
+        WHERE id = $1`
+
+	var driver models.Driver
+	err := TxorDB(ctx, r.db).QueryRow(ctx, query, driverID).Scan(
+		&driver.ID,
+		&driver.Name,
+		&driver.CreatedAt,
+		&driver.UpdatedAt,
+		&driver.LicenseNumber,
+		&driver.Vehicle.Type,
+		&driver.Vehicle,
+		&driver.Rating,
+		&driver.TotalRides,
+		&driver.TotalEarnings,
+		&driver.Status,
+		&driver.IsVerified,
+	)
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return models.Driver{}, types.ErrUserNotFound
+		}
+		return models.Driver{}, wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
+	}
+
+	return driver, nil
 }

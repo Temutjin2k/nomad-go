@@ -41,9 +41,9 @@ func (a *API) setupRideRoutes() {
 func (a *API) setupDriverAndLocationRoutes() {
 	a.mux.HandleFunc("POST /drivers", a.routes.driver.Register)
 	a.mux.HandleFunc("POST /drivers/{driver_id}/online", a.routes.driver.GoOnline)                          // Driver goes online
-	a.mux.HandleFunc("POST /drivers/{driver_id}/offline", func(w http.ResponseWriter, r *http.Request) {})  // Driver goes offline
+	a.mux.HandleFunc("POST /drivers/{driver_id}/offline", a.routes.driver.GoOffline)                        // Driver goes offline
 	a.mux.HandleFunc("POST /drivers/{driver_id}/location", func(w http.ResponseWriter, r *http.Request) {}) // Update driver location
-	a.mux.HandleFunc("POST /drivers/{driver_id}/start", func(w http.ResponseWriter, r *http.Request) {})    // Start a ride
+	a.mux.HandleFunc("POST /drivers/{driver_id}/start", a.routes.driver.StartRide)                          // Start a ride
 	a.mux.HandleFunc("POST /drivers/{driver_id}/complete", func(w http.ResponseWriter, r *http.Request) {}) // Complete a ride
 	a.mux.HandleFunc("GET /ws/drivers/{driver_id}", func(w http.ResponseWriter, r *http.Request) {})        // WebSocket connection for drivers
 }

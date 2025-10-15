@@ -64,4 +64,24 @@ create table location_history (
     ride_id uuid references rides(id)
 );
 
+CREATE OR REPLACE FUNCTION set_is_current_false()
+RETURNS TRIGGER AS $$
+BEGIN 
+    -- Обнуляем текущие координаты сущности (водитель или пассажир)
+    UPDATE coordinates
+    SET is_current = false 
+    WHERE entity_id = NEW.entity_id
+        AND entity_type = NEW.entity_type
+        AND is_current = true;
+
+    -- Новая координата автоматически будет is_current = true (по дефолту)
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_set_is_current_false 
+BEFORE INSERT ON coordinates
+FOR EACH ROW 
+EXECUTE FUNCTION set_is_current_false();
+
 commit;
