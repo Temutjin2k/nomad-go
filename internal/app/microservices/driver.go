@@ -12,11 +12,10 @@ import (
 	repo "github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
 	publisher "github.com/Temutjin2k/ride-hail-system/internal/adapter/rabbit"
 	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
-	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver.go"
+	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	"github.com/Temutjin2k/ride-hail-system/pkg/postgres"
 	"github.com/Temutjin2k/ride-hail-system/pkg/rabbit"
-
 	"github.com/Temutjin2k/ride-hail-system/pkg/trm"
 )
 

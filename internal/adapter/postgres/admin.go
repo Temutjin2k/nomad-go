@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type AdminRepo struct {
@@ -306,7 +307,7 @@ func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResp
 			PassengerID:        passengerID,
 			PickupAddress:      pickupAddr,
 			DestinationAddress: destAddr,
-			CurrentDriverLocation: models.Location{
+			CurrentDriverLocation: models.LocationInfo{
 				Latitude:  0,
 				Longitude: 0,
 			},
