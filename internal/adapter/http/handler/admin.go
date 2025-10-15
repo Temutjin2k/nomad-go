@@ -10,7 +10,7 @@ import (
 )
 
 type AdminService interface {
-	GetOverview(ctx context.Context) (any, error)
+	GetOverview(ctx context.Context) (*models.OverviewResponse, error)
 	GetActiveRides(ctx context.Context) (*models.ActiveRidesResponse, error)
 }
 
@@ -30,14 +30,16 @@ func (h *Admin) GetOverview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = wrap.WithAction(ctx, "admin_get_overview")
 
-	res, err := h.s.GetOverview(ctx)
+	overview, err := h.s.GetOverview(ctx)
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to get overview", err)
 		internalErrorResponse(w, err.Error())
 		return
 	}
 
-	if err := writeJSON(w, http.StatusOK, envelope{"data": res}, nil); err != nil {
+	h.l.Debug(ctx, "fetched overview", "timestamp", overview.Timestamp)
+
+	if err := writeJSON(w, http.StatusOK, overview, nil); err != nil {
 		h.l.Error(ctx, "failed to write response", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -47,14 +49,16 @@ func (h *Admin) GetActiveRides(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = wrap.WithAction(ctx, "admin_get_active_rides")
 
-	res, err := h.s.GetActiveRides(ctx)
+	rides, err := h.s.GetActiveRides(ctx)
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to get active rides", err)
 		internalErrorResponse(w, err.Error())
 		return
 	}
 
-	if err := writeJSON(w, http.StatusOK, envelope{"data": res}, nil); err != nil {
+	h.l.Debug(ctx, "fetched active rides", "count", len(rides.Rides))
+
+	if err := writeJSON(w, http.StatusOK, rides, nil); err != nil {
 		h.l.Error(ctx, "failed to write response", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}

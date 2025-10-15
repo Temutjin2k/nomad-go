@@ -3,7 +3,6 @@ package ride
 import (
 	"context"
 	"flag"
-	"fmt"
 	"os"
 
 	"github.com/Temutjin2k/ride-hail-system/config"
@@ -39,8 +38,6 @@ func Run() {
 	if cfg.Mode != "" {
 		log = logger.InitLogger(string(cfg.Mode), logger.LevelDebug)
 	}
-
-	fmt.Println(cfg.Auth.JWTSecret)
 
 	// Creating application
 	app, err := app.NewApplication(ctx, *cfg, log)

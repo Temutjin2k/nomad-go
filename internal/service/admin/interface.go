@@ -7,6 +7,6 @@ import (
 )
 
 type AdminRepository interface {
-	GetOverview(ctx context.Context) (any, error)
+	GetOverview(ctx context.Context) (*models.OverviewResponse, error)
 	GetActiveRides(ctx context.Context) (*models.ActiveRidesResponse, error)
 }

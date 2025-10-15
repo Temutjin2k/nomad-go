@@ -19,7 +19,8 @@ type RideInfo struct {
 	DestinationAddress    string    `json:"destination_address"`
 	StartedAt             time.Time `json:"started_at"`
 	EstimatedCompletion   time.Time `json:"estimated_completion"`
-	CurrentDriverLocation LocationInfo  `json:"current_driver_location"`
+	CurrentDriverLocation Location  `json:"current_driver_location"`
+	DestinationLocation   Location  `json:"destination_location"`
 	DistanceCompletedKm   float64   `json:"distance_completed_km"`
 	DistanceRemainingKm   float64   `json:"distance_remaining_km"`
 }
