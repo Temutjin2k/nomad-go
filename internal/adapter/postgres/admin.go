@@ -263,23 +263,23 @@ func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResp
 	defer rows.Close()
 
 	rides := make([]models.RideInfo, 0, pageSize)
-    for rows.Next() {
-        var (
-            rideID       uuid.UUID
-            rideNumber   string
-            status       string
-            passengerID  uuid.UUID
-            driverIDNull sql.NullString
-            pickupAddr   string
-            destAddr     string
-            destLatNull  sql.NullFloat64
-            destLonNull  sql.NullFloat64
-            startedAtPtr *time.Time
-            estComplPtr  *time.Time
-            latNull      sql.NullFloat64
-            lonNull      sql.NullFloat64
-            distDoneKm   float64
-        )
+	for rows.Next() {
+		var (
+			rideID       uuid.UUID
+			rideNumber   string
+			status       string
+			passengerID  uuid.UUID
+			driverIDNull sql.NullString
+			pickupAddr   string
+			destAddr     string
+			destLatNull  sql.NullFloat64
+			destLonNull  sql.NullFloat64
+			startedAtPtr *time.Time
+			estComplPtr  *time.Time
+			latNull      sql.NullFloat64
+			lonNull      sql.NullFloat64
+			distDoneKm   float64
+		)
 
 		if err := rows.Scan(
 			&rideID,
@@ -287,18 +287,18 @@ func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResp
 			&status,
 			&passengerID,
 			&driverIDNull,
-            &pickupAddr,
-            &destAddr,
-            &destLatNull,
-            &destLonNull,
-            &startedAtPtr,
-            &estComplPtr,
-            &latNull,
-            &lonNull,
-            &distDoneKm,
-        ); err != nil {
-            return nil, err
-        }
+			&pickupAddr,
+			&destAddr,
+			&destLatNull,
+			&destLonNull,
+			&startedAtPtr,
+			&estComplPtr,
+			&latNull,
+			&lonNull,
+			&distDoneKm,
+		); err != nil {
+			return nil, err
+		}
 
 		ri := models.RideInfo{
 			RideID:             rideID,
@@ -307,7 +307,7 @@ func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResp
 			PassengerID:        passengerID,
 			PickupAddress:      pickupAddr,
 			DestinationAddress: destAddr,
-			CurrentDriverLocation: models.LocationInfo{
+			CurrentDriverLocation: models.Location{
 				Latitude:  0,
 				Longitude: 0,
 			},
@@ -330,19 +330,19 @@ func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResp
 		if latNull.Valid {
 			ri.CurrentDriverLocation.Latitude = latNull.Float64
 		}
-            if lonNull.Valid {
-                ri.CurrentDriverLocation.Longitude = lonNull.Float64
-            }
+		if lonNull.Valid {
+			ri.CurrentDriverLocation.Longitude = lonNull.Float64
+		}
 
-            if destLatNull.Valid {
-                ri.DestinationLocation.Latitude = destLatNull.Float64
-            }
-            if destLonNull.Valid {
-                ri.DestinationLocation.Longitude = destLonNull.Float64
-            }
+		if destLatNull.Valid {
+			ri.DestinationLocation.Latitude = destLatNull.Float64
+		}
+		if destLonNull.Valid {
+			ri.DestinationLocation.Longitude = destLonNull.Float64
+		}
 
-            rides = append(rides, ri)
-        }
+		rides = append(rides, ri)
+	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}

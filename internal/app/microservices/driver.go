@@ -61,7 +61,7 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 	tokenService := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authService := auth.NewAuthService(userRepo, tokenService, log)
 
-	httpServer, err := server.New(cfg, driverService, nil, authService, log)
+	httpServer, err := server.New(cfg, driverService, nil, nil, authService, log)
 	if err != nil {
 		log.Error(ctx, "Failed to setup http server", err)
 		return nil, err

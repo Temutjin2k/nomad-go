@@ -9,6 +9,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/config"
 	httpserver "github.com/Temutjin2k/ride-hail-system/internal/adapter/http/server"
 	repo "github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
+	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
 	ridego "github.com/Temutjin2k/ride-hail-system/internal/service/ride"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	postgres "github.com/Temutjin2k/ride-hail-system/pkg/postgres"
@@ -32,13 +33,18 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 	}
 
 	trm := trm.New(postgresDB.Pool)
-	rideRepo := repo.NewRideRepository(postgresDB.Pool) 
+	rideRepo := repo.NewRideRepo(postgresDB.Pool)
+	userRepo := repo.NewUserRepo(postgresDB.Pool)
+	refreshTokenRepo := repo.NewRefreshTokenRepo(postgresDB.Pool)
 
 	// TODO: fix all of them
-	rideService := ridego.NewRideService(rideRepo, log, trm, nil) 
+	rideService := ridego.NewRideService(rideRepo, log, trm, nil)
 	_ = rideService
 
-	httpServer, err := httpserver.New(cfg, nil, nil, nil, nil, log)
+	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
+	authSvc := auth.NewAuthService(userRepo, tokenSvc, log)
+
+	httpServer, err := httpserver.New(cfg, nil, nil, nil, authSvc, log)
 	if err != nil {
 		log.Error(ctx, "Failed to setup http server", err)
 		return nil, err
