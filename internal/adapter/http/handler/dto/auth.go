@@ -6,9 +6,10 @@ import (
 )
 
 type RegisterUserRequest struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Name     string         `json:"name"`
+	Email    string         `json:"email"`
+	Password string         `json:"password"`
+	Attrs    map[string]any `json:"attrs,omitempty"`
 }
 
 func (r *RegisterUserRequest) ToModel() *models.UserCreateRequest {
@@ -16,6 +17,7 @@ func (r *RegisterUserRequest) ToModel() *models.UserCreateRequest {
 		Name:     r.Name,
 		Email:    r.Email,
 		Password: r.Password,
+		Attrs:    r.Attrs,
 	}
 }
 
