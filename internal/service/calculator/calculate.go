@@ -1,22 +1,26 @@
-package ride
+package ridecalc
 
 import (
-	"context"
-	"fmt"
 	"math"
 	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
-	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
+	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 )
 
 const (
 	averageSpeedKmh = 50 // средняя скорость в пути
-	earthRadiusKm = 6371	
+	earthRadiusKm   = 6371
 )
 
-// вычисление расстояние между двумя координатами, используя формулу гаверсинусов
-func calculateDistance(p1, p2 models.Location) float64 {
+type Calculator struct{}
+
+func New() *Calculator {
+	return &Calculator{}
+}
+
+// вычисление расстояние между двумя координатами, используя формулу гаверсинусов в километрах
+func (c *Calculator) Distance(p1, p2 models.Location) float64 {
 	// градусы в радианы
 	lat1Rad := p1.Latitude * math.Pi / 180
 	lon1Rad := p1.Longitude * math.Pi / 180
@@ -29,14 +33,14 @@ func calculateDistance(p1, p2 models.Location) float64 {
 
 	// формула гаверсинусов
 	a := math.Pow(math.Sin(diffLat/2), 2) + math.Cos(lat1Rad)*math.Cos(lat2Rad)*math.Pow(math.Sin(diffLon/2), 2)
-	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	angle := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 
-	distance := earthRadiusKm * c
+	distance := earthRadiusKm * angle
 	return distance
 }
 
 // примерное время в минутах (целое число).
-func calculateDuration(distanceKm float64) int {
+func (c *Calculator) Duration(distanceKm float64) int {
 	if distanceKm <= 0 {
 		return 0
 	}
@@ -47,7 +51,7 @@ func calculateDuration(distanceKm float64) int {
 }
 
 // рассчет предварительную стоимость поездки на основе тарифов
-func calculateFare(rideType string, distanceKm float64, durationMin int) float64 {
+func (c *Calculator) Fare(rideType string, distanceKm float64, durationMin int) float64 {
 	var baseFare, ratePerKm, ratePerMin float64
 
 	switch rideType {
@@ -72,20 +76,7 @@ func calculateFare(rideType string, distanceKm float64, durationMin int) float64
 	return fare
 }
 
-// создать уникальный номер поездки
-func (s *RideService) generateRideNumber(ctx context.Context) (string, error) {
-	datePart := time.Now().Format("20060102")
-	
-	count, err := s.repo.CountByDate(ctx, time.Now())
-	if err != nil {
-		return "", wrap.Error(ctx, err)
-	}
-	
-	nextSequence := count + 1
-	return fmt.Sprintf("RIDE_%s_%03d", datePart, nextSequence), nil
-}
-
-func calculatePriority(ride *models.Ride) int {
+func (c *Calculator) Priority(ride *models.Ride) int {
 	priority := 1
 
 	// Правило №1: Час пик
@@ -109,4 +100,26 @@ func calculatePriority(ride *models.Ride) int {
 	}
 
 	return priority
+}
+
+// getEstimatedArrival calculates the estimated arrival time based on distance and average speed.
+func (c *Calculator) EstimatedArrival(startLat, startLon, destLat, destLon float64, vehicleClass types.VehicleClass) time.Time {
+	distanceKm := c.Distance(
+		models.Location{
+			Latitude:  startLat,
+			Longitude: startLon,
+		},
+		models.Location{
+			Latitude:  destLat,
+			Longitude: destLon,
+		},
+	)
+
+	// Time in minutes
+	timeMin := c.Duration(distanceKm)
+
+	// Convert minutes to duration
+	timeDuration := time.Duration(timeMin) * time.Minute
+
+	return time.Now().Add(timeDuration)
 }

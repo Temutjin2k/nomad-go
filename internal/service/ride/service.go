@@ -8,6 +8,7 @@ import (
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
+	ridecalc "github.com/Temutjin2k/ride-hail-system/internal/service/calculator"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/trm"
@@ -15,17 +16,19 @@ import (
 )
 
 type RideService struct {
-	repo   RideRepo
-	logger logger.Logger
-	trm    trm.TxManager
+	repo      RideRepo
+	logger    logger.Logger
+	trm       trm.TxManager
 	publisher RideMsgBroker
+	calculate *ridecalc.Calculator
 }
 
-func NewRideService(repo RideRepo, logger logger.Logger, trm trm.TxManager, publisher RideMsgBroker) *RideService {
+func NewRideService(repo RideRepo, calculate *ridecalc.Calculator, logger logger.Logger, trm trm.TxManager, publisher RideMsgBroker) *RideService {
 	return &RideService{
-		repo: repo,
-		logger: logger,
-		trm: trm,
+		repo:      repo,
+		logger:    logger,
+		calculate: calculate,
+		trm:       trm,
 		publisher: publisher,
 	}
 }
@@ -36,10 +39,10 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 	var createdRide *models.Ride
 
 	err := s.trm.Do(ctx, func(ctx context.Context) error {
-		distance := calculateDistance(ride.Pickup, ride.Destination)
-		duration := calculateDuration(distance)
-		fare := calculateFare(ride.RideType, distance, duration)
-		priority := calculatePriority(ride)
+		distance := s.calculate.Distance(ride.Pickup, ride.Destination)
+		duration := s.calculate.Duration(distance)
+		fare := s.calculate.Fare(ride.RideType, distance, duration)
+		priority := s.calculate.Priority(ride)
 		rideNumber, err := s.generateRideNumber(ctx)
 		if err != nil {
 			return wrap.Error(ctx, fmt.Errorf("could not generate ride number: %w", err))
@@ -80,7 +83,7 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		RideType:       createdRide.RideType,
 		EstimatedFare:  createdRide.EstimatedFare,
 		MaxDistanceKm:  5.0, // Это чтобы не ожидать драйвера из какого нибудь Мадагаскара
-		TimeoutSeconds: 120, 
+		TimeoutSeconds: 120,
 		CorrelationID:  createdRide.RideNumber,
 	}
 
@@ -102,7 +105,7 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 		ride, err := s.repo.Get(ctx, rideID)
 		if err != nil {
 			if errors.Is(err, types.ErrNotFound) {
-				return wrap.Error(ctx,types.ErrRideNotFound)
+				return wrap.Error(ctx, types.ErrRideNotFound)
 			}
 			return wrap.Error(ctx, fmt.Errorf("could not find ride by id: %w", err))
 		}
@@ -126,7 +129,7 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 	})
 
 	if err != nil {
-		return nil, err 
+		return nil, err
 	}
 
 	message := models.RideStatusUpdateMessage{
