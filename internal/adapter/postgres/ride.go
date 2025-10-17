@@ -56,24 +56,24 @@ func (r *RideRepo) Create(ctx context.Context, ride *models.Ride) (*models.Ride,
 }
 
 func (r *RideRepo) CountByDate(ctx context.Context, date time.Time) (int, error) {
-    q := TxorDB(ctx, r.db) 
+	q := TxorDB(ctx, r.db)
 
 	var count int
 	query := "SELECT COUNT(*) FROM rides WHERE DATE(created_at) = $1;"
-	
+
 	err := q.QueryRow(ctx, query, date.Format("2006-01-02")).Scan(&count)
 	if err != nil {
-		return 0, wrap.Error(ctx,fmt.Errorf("Ride repo: CountByDate: %w", err))
+		return 0, wrap.Error(ctx, fmt.Errorf("Ride repo: CountByDate: %w", err))
 	}
 	return count, nil
 }
 
 func (r *RideRepo) Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error) {
-    q := TxorDB(ctx, r.db)
+	q := TxorDB(ctx, r.db)
 
-    var ride models.Ride
-    // JOIN чтобы сразу получить адреса
-    query := `
+	var ride models.Ride
+	// JOIN чтобы сразу получить адреса
+	query := `
         SELECT
             r.id, r.ride_number, r.status, r.passenger_id, r.driver_id, r.vehicle_type,
             r.estimated_fare, r.final_fare, r.cancellation_reason,
@@ -85,29 +85,29 @@ func (r *RideRepo) Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, err
         JOIN coordinates d ON r.destination_coordinate_id = d.id
         WHERE r.id = $1;`
 
-    row := q.QueryRow(ctx, query, rideID)
-    err := row.Scan(
-        &ride.ID, &ride.RideNumber, &ride.Status, &ride.PassengerID, &ride.DriverID, &ride.RideType,
-        &ride.EstimatedFare, &ride.FinalFare, &ride.CancellationReason,
-        &ride.CreatedAt, &ride.MatchedAt, &ride.ArrivedAt, &ride.StartedAt, &ride.CompletedAt, &ride.CancelledAt,
-        &ride.Pickup.Address, &ride.Pickup.Latitude, &ride.Pickup.Longitude,
-        &ride.Destination.Address, &ride.Destination.Latitude, &ride.Destination.Longitude,
-    )
+	row := q.QueryRow(ctx, query, rideID)
+	err := row.Scan(
+		&ride.ID, &ride.RideNumber, &ride.Status, &ride.PassengerID, &ride.DriverID, &ride.RideType,
+		&ride.EstimatedFare, &ride.FinalFare, &ride.CancellationReason,
+		&ride.CreatedAt, &ride.MatchedAt, &ride.ArrivedAt, &ride.StartedAt, &ride.CompletedAt, &ride.CancelledAt,
+		&ride.Pickup.Address, &ride.Pickup.Latitude, &ride.Pickup.Longitude,
+		&ride.Destination.Address, &ride.Destination.Latitude, &ride.Destination.Longitude,
+	)
 
-    if err != nil {
-        if errors.Is(err, pgx.ErrNoRows) {
-            return nil, wrap.Error(ctx, types.ErrNotFound) 
-        }
-        return nil, wrap.Error(ctx, fmt.Errorf("Ride repo: Get: %w", err))
-    }
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, wrap.Error(ctx, types.ErrRideNotFound)
+		}
+		return nil, wrap.Error(ctx, fmt.Errorf("Ride repo: Get: %w", err))
+	}
 
-    return &ride, nil
+	return &ride, nil
 }
 
 func (r *RideRepo) Update(ctx context.Context, ride *models.Ride) error {
-    q := TxorDB(ctx, r.db)
+	q := TxorDB(ctx, r.db)
 
-    query := `
+	query := `
         UPDATE rides
         SET
             status = $2,
@@ -122,28 +122,28 @@ func (r *RideRepo) Update(ctx context.Context, ride *models.Ride) error {
             updated_at = now()
         WHERE id = $1;`
 
-    cmdTag, err := q.Exec(ctx, query,
-        ride.ID,
-        ride.Status,
-        ride.DriverID,
-        ride.FinalFare,
-        ride.CancellationReason,
-        ride.MatchedAt,
-        ride.ArrivedAt,
-        ride.StartedAt,
-        ride.CompletedAt,
-        ride.CancelledAt,
-    )
+	cmdTag, err := q.Exec(ctx, query,
+		ride.ID,
+		ride.Status,
+		ride.DriverID,
+		ride.FinalFare,
+		ride.CancellationReason,
+		ride.MatchedAt,
+		ride.ArrivedAt,
+		ride.StartedAt,
+		ride.CompletedAt,
+		ride.CancelledAt,
+	)
 
-    if err != nil {
-        return wrap.Error(ctx, fmt.Errorf("Ride repo: Update: %w", err))
-    }
+	if err != nil {
+		return wrap.Error(ctx, fmt.Errorf("Ride repo: Update: %w", err))
+	}
 
-    if cmdTag.RowsAffected() == 0 {
-        return wrap.Error(ctx, types.ErrNotFound) 
-    }
+	if cmdTag.RowsAffected() == 0 {
+		return wrap.Error(ctx, types.ErrNotFound)
+	}
 
-    return nil
+	return nil
 }
 
 func (r *RideRepo) StartRide(ctx context.Context, rideID, driverID uuid.UUID, startedAt time.Time, rideEvent models.RideEvent) error {
@@ -170,6 +170,36 @@ func (r *RideRepo) StartRide(ctx context.Context, rideID, driverID uuid.UUID, st
 			return types.ErrRideNotFound
 		}
 
+		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
+		return wrap.Error(ctx, fmt.Errorf("%s: failed to insert ride event: %w", op, err))
+	}
+
+	return nil
+}
+
+func (r *RideRepo) CompleteRide(ctx context.Context, rideID, driverID uuid.UUID, completedAt time.Time, rideEvent models.RideEvent) error {
+	const op = "RideRepo.CompleteRide"
+
+	// Update the ride status to 'COMPLETED' and set the completed_at timestamp
+	updateQuery := `
+        UPDATE rides
+        SET status = 'COMPLETED', updated_at = now(), completed_at = $2
+        WHERE id = $1;`
+
+	if _, err := TxorDB(ctx, r.db).Exec(ctx, updateQuery, rideID, completedAt); err != nil {
+		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
+		return wrap.Error(ctx, fmt.Errorf("%s: failed to update ride status: %w", op, err))
+	}
+
+	// Insert a new ride event into the ride_events table
+	insertEventQuery := `
+        INSERT INTO ride_events(ride_id, event_type, event_data)
+        VALUES($1, 'RIDE_COMPLETED', $2);`
+
+	if _, err := TxorDB(ctx, r.db).Exec(ctx, insertEventQuery, rideID, rideEvent); err != nil {
+		if postgres.IsForeignKeyViolation(err) {
+			return types.ErrRideNotFound
+		}
 		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
 		return wrap.Error(ctx, fmt.Errorf("%s: failed to insert ride event: %w", op, err))
 	}

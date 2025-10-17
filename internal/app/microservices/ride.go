@@ -10,6 +10,7 @@ import (
 	httpserver "github.com/Temutjin2k/ride-hail-system/internal/adapter/http/server"
 	repo "github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
 	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
+	ridecalc "github.com/Temutjin2k/ride-hail-system/internal/service/calculator"
 	ridego "github.com/Temutjin2k/ride-hail-system/internal/service/ride"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	postgres "github.com/Temutjin2k/ride-hail-system/pkg/postgres"
@@ -37,8 +38,11 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 	userRepo := repo.NewUserRepo(postgresDB.Pool)
 	refreshTokenRepo := repo.NewRefreshTokenRepo(postgresDB.Pool)
 
+	// Calculator service
+	calculator := ridecalc.New()
+
 	// TODO: fix all of them
-	rideService := ridego.NewRideService(rideRepo, log, trm, nil)
+	rideService := ridego.NewRideService(rideRepo, calculator, log, trm, nil)
 	_ = rideService
 
 	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)

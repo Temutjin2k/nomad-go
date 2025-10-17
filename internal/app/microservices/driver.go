@@ -12,6 +12,7 @@ import (
 	repo "github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
 	publisher "github.com/Temutjin2k/ride-hail-system/internal/adapter/rabbit"
 	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
+	ridecalc "github.com/Temutjin2k/ride-hail-system/internal/service/calculator"
 	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	"github.com/Temutjin2k/ride-hail-system/pkg/postgres"
@@ -55,9 +56,11 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 	// External API client
 	locationIQclient := locationIQ.New(cfg.ExternalAPIConfig.LocationIQapiKey)
 
-	// Main Service
-	driverService := drivergo.New(driverRepo, sessionRepo, coordinateRepo, userRepo, rideRepo, locationIQclient, driverProducer, trm, log)
+	// Calculator service
+	calculator := ridecalc.New()
 
+	// Main Service
+	driverService := drivergo.New(driverRepo, sessionRepo, coordinateRepo, userRepo, rideRepo, locationIQclient, driverProducer, calculator, trm, log)
 	tokenService := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authService := auth.NewAuthService(userRepo, tokenService, log)
 

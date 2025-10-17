@@ -7,31 +7,222 @@
 	},
 	"item": [
 		{
-			"name": "Create Driver",
-			"request": {
-				"method": "POST",
-				"header": [],
-				"body": {
-					"mode": "raw",
-					"raw": "{\r\n    \"id\":\"9db2580a-2175-4852-8278-d629171a9f3e\",\r\n    \"license_number\":\"AA3123123\",\r\n    \"name\":\"Bacoonti\",\r\n    \"vehicle\": {\r\n        \"color\": \"black\",\r\n        \"make\": \"Chevrolet\",\r\n        \"model\": \"Cobalt\",\r\n        \"plate\": \"340PQA01\",\r\n        \"year\": 2015\r\n    }\r\n}",
-					"options": {
-						"raw": {
-							"language": "json"
+			"name": "Driver",
+			"item": [
+				{
+					"name": "Create Driver",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"id\":\"3a0fc3ed-4c04-4ba0-a690-b7c09b8236f2\",\r\n    \"license_number\":\"AA3123123\",\r\n    \"name\":\"Bacoonti\",\r\n    \"vehicle\": {\r\n        \"color\": \"black\",\r\n        \"make\": \"Chevrolet\",\r\n        \"model\": \"Cobalt\",\r\n        \"plate\": \"340PQA01\",\r\n        \"year\": 2015\r\n    }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "localhost:3001/drivers",
+							"host": [
+								"localhost"
+							],
+							"port": "3001",
+							"path": [
+								"drivers"
+							]
 						}
-					}
+					},
+					"response": []
 				},
-				"url": {
-					"raw": "localhost:3001/drivers",
-					"host": [
-						"localhost"
-					],
-					"port": "3001",
-					"path": [
-						"drivers"
-					]
+				{
+					"name": "Driver go online",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"latitude\": 43.238949,\r\n  \"longitude\": 76.889709\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "localhost:3001/drivers/{{driver_id}}/online",
+							"host": [
+								"localhost"
+							],
+							"port": "3001",
+							"path": [
+								"drivers",
+								"{{driver_id}}",
+								"online"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Driver go offline",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "localhost:3001/drivers/{{driver_id}}/offline",
+							"host": [
+								"localhost"
+							],
+							"port": "3001",
+							"path": [
+								"drivers",
+								"{{driver_id}}",
+								"offline"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Start Ride",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"ride_id\": \"e64072a7-1ad8-4f7a-b116-9f5ec289c119\",\r\n  \"driver_location\": {\r\n    \"latitude\": 43.238949,\r\n    \"longitude\": 76.889709\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "localhost:3001/drivers/{{driver_id}}/start",
+							"host": [
+								"localhost"
+							],
+							"port": "3001",
+							"path": [
+								"drivers",
+								"{{driver_id}}",
+								"start"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Complete Ride",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"ride_id\": \"e64072a7-1ad8-4f7a-b116-9f5ec289c119\",\r\n  \"driver_location\": {\r\n    \"latitude\": 43.238949,\r\n    \"longitude\": 76.889709\r\n  }\r\n}"
+						},
+						"url": {
+							"raw": "localhost:3001/drivers/{{driver_id}}/complete",
+							"host": [
+								"localhost"
+							],
+							"port": "3001",
+							"path": [
+								"drivers",
+								"{{driver_id}}",
+								"complete"
+							]
+						}
+					},
+					"response": []
 				}
-			},
-			"response": []
+			]
+		},
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Register",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\":\"Baconti\",\r\n    \"email\":\"beka1234@gmail.com\",\r\n    \"password\":\"supersecret\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "localhost:3005/auth/register",
+							"host": [
+								"localhost"
+							],
+							"port": "3005",
+							"path": [
+								"auth",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"id\":\"3a0fc3ed-4c04-4ba0-a690-b7c09b8236f2\",\r\n    \"license_number\":\"AA3123123\",\r\n    \"name\":\"Bacoonti\",\r\n    \"vehicle\": {\r\n        \"color\": \"black\",\r\n        \"make\": \"Chevrolet\",\r\n        \"model\": \"Cobalt\",\r\n        \"plate\": \"340PQA01\",\r\n        \"year\": 2015\r\n    }\r\n}"
+						},
+						"url": {
+							"raw": "localhost:3005/auth/login",
+							"host": [
+								"localhost"
+							],
+							"port": "3005",
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"refresh_token\":\"\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "localhost:3005/auth/refresh",
+							"host": [
+								"localhost"
+							],
+							"port": "3005",
+							"path": [
+								"auth",
+								"refresh"
+							]
+						}
+					},
+					"response": []
+				}
+			]
 		}
 	]
 }
