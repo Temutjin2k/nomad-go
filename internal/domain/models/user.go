@@ -22,7 +22,10 @@ const userCtxKey ctxKey = iota
 
 // UserFromContext returns authenticated user or nil.
 func UserFromContext(ctx context.Context) *User {
-	u, _ := ctx.Value(userCtxKey).(*User)
+	u, ok := ctx.Value(userCtxKey).(*User)
+	if !ok {
+		return nil
+	}
 	return u
 }
 
@@ -31,9 +34,10 @@ func WithUser(ctx context.Context, u *User) context.Context {
 }
 
 type UserCreateRequest struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Name     string         `json:"name"`
+	Email    string         `json:"email"`
+	Password string         `json:"password"`
+	Attrs    map[string]any `json:"attrs,omitempty"`
 }
 
 type User struct {

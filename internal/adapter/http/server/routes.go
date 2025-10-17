@@ -52,6 +52,7 @@ func (a *API) SetupAuthRoutes() {
 	a.mux.HandleFunc("POST /auth/register", a.routes.auth.Register)
 	a.mux.HandleFunc("POST /auth/login", a.routes.auth.Login)
 	a.mux.HandleFunc("POST /auth/refresh", a.routes.auth.Refresh)
+	a.mux.HandleFunc("GET /auth/me", a.routes.auth.Profile)
 }
 
 // HealthCheck - returns system information.
