@@ -1,9 +1,9 @@
 {
 	"info": {
-		"_postman_id": "b86afdb5-e070-466a-bae0-1ede1b801355",
-		"name": "Ride Hail",
+		"_postman_id": "dc5e33e6-8bb1-4b73-acf4-ab3169980d39",
+		"name": "Ride Hail API",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "39030219"
+		"_exporter_id": "38774679"
 	},
 	"item": [
 		{
@@ -217,6 +217,70 @@
 							"path": [
 								"auth",
 								"refresh"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Admin",
+			"item": [
+				{
+					"name": "overview",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRhbXV0ZHpoaW4yMDAwQG1haWwucnUiLCJleHAiOjE3NjA1NDk1MDQsImlhdCI6MTc2MDU0ODYwNCwianRpIjoiMjQ1YWRkZTctMTJjYS00NDJhLWJkYTMtZWI5ZDEwNGVkOTMzIiwicm9sZSI6IlBBU1NFTkdFUiIsInR5cCI6ImFjY2Vzc190b2tlbiIsInVzZXJfaWQiOiI5NDgwODA3ZC01NjgzLTQzN2MtODFmNi02NzJjZTAzMDE1Y2EifQ.PLJ66sD06gkuOv6xz-CG2SYUVchQWi96cmk9PRPXVSU",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "localhost:3004/admin/overview",
+							"host": [
+								"localhost"
+							],
+							"port": "3004",
+							"path": [
+								"admin",
+								"overview"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "active rides",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRhbXV0ZHpoaW4yMDAwQG1haWwucnUiLCJleHAiOjE3NjA1NDk1MDQsImlhdCI6MTc2MDU0ODYwNCwianRpIjoiMjQ1YWRkZTctMTJjYS00NDJhLWJkYTMtZWI5ZDEwNGVkOTMzIiwicm9sZSI6IlBBU1NFTkdFUiIsInR5cCI6ImFjY2Vzc190b2tlbiIsInVzZXJfaWQiOiI5NDgwODA3ZC01NjgzLTQzN2MtODFmNi02NzJjZTAzMDE1Y2EifQ.PLJ66sD06gkuOv6xz-CG2SYUVchQWi96cmk9PRPXVSU",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "localhost:3004/admin/rides/active",
+							"host": [
+								"localhost"
+							],
+							"port": "3004",
+							"path": [
+								"admin",
+								"rides",
+								"active"
 							]
 						}
 					},
