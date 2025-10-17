@@ -94,24 +94,55 @@ func readJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 
 func GetCode(err error) int {
 	switch {
-	case IsOneOf(err, t.ErrInvalidLicenseFormat):
+	case oneOf(err,
+		t.ErrInvalidLicenseFormat,
+		t.ErrDriverAlreadyOffline,
+		t.ErrDriverAlreadyOnline,
+		t.ErrLicenseAlreadyExists,
+	):
 		return http.StatusBadRequest
-	case IsOneOf(err, t.ErrUserNotFound, t.ErrSessionNotFound, t.ErrNoCoordinates, t.ErrRideNotFound, t.ErrDriverLocationNotFound):
+
+	case oneOf(err,
+		t.ErrUserNotFound,
+		t.ErrSessionNotFound,
+		t.ErrNoCoordinates,
+		t.ErrRideNotFound,
+		t.ErrDriverLocationNotFound,
+	):
 		return http.StatusNotFound
-	case IsOneOf(err, t.ErrLicenseAlreadyExists, t.ErrDriverRegistered, t.ErrDriverAlreadyOnline, t.ErrDriverAlreadyOffline, t.ErrDriverMustBeAvailable, authSvc.ErrNotUniqueEmail, t.ErrDriverAlreadyOnRide, t.ErrRideDriverMismatch, t.ErrRideNotArrived):
+
+	case oneOf(err,
+		t.ErrDriverRegistered,
+		t.ErrDriverMustBeAvailable,
+		authSvc.ErrNotUniqueEmail,
+		t.ErrDriverAlreadyOnRide,
+		t.ErrRideDriverMismatch,
+		t.ErrRideNotArrived,
+		t.ErrDriverMustBeEnRoute,
+		t.ErrRideNotInProgress,
+		t.ErrRideCannotBeCancelled,
+		t.ErrDriverMustBeBusy,
+	):
 		return http.StatusConflict
-	case IsOneOf(err, authSvc.ErrInvalidCredentials, authSvc.ErrInvalidToken, authSvc.ErrExpToken):
+
+	case oneOf(err,
+		authSvc.ErrInvalidCredentials,
+		authSvc.ErrInvalidToken,
+		authSvc.ErrExpToken,
+	):
 		return http.StatusUnauthorized
-	case IsOneOf(err, authSvc.ErrCannotCreateAdmin):
+
+	case oneOf(err, authSvc.ErrCannotCreateAdmin):
 		return http.StatusForbidden
+
 	default:
 		return http.StatusInternalServerError
 	}
 }
 
-func IsOneOf(err error, targets ...error) bool {
-	for _, target := range targets {
-		if errors.Is(err, target) {
+func oneOf(err error, targets ...error) bool {
+	for _, t := range targets {
+		if errors.Is(err, t) {
 			return true
 		}
 	}
