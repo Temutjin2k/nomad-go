@@ -13,14 +13,22 @@ const (
 	earthRadiusKm   = 6371
 )
 
-type Calculator struct{}
+type Calculator interface {
+	Distance(p1, p2 models.Location) float64
+	Duration(distanceKm float64) int
+	Fare(rideType string, distanceKm float64, durationMin int) float64
+	Priority(ride *models.Ride) int
+	EstimatedArrival(startLat, startLon, destLat, destLon float64, vehicleClass types.VehicleClass) time.Time
+}
 
-func New() *Calculator {
-	return &Calculator{}
+type CalculatorImpl struct{}
+
+func New() *CalculatorImpl {
+	return &CalculatorImpl{}
 }
 
 // вычисление расстояние между двумя координатами, используя формулу гаверсинусов в километрах
-func (c *Calculator) Distance(p1, p2 models.Location) float64 {
+func (c *CalculatorImpl) Distance(p1, p2 models.Location) float64 {
 	// градусы в радианы
 	lat1Rad := p1.Latitude * math.Pi / 180
 	lon1Rad := p1.Longitude * math.Pi / 180
@@ -40,7 +48,7 @@ func (c *Calculator) Distance(p1, p2 models.Location) float64 {
 }
 
 // примерное время в минутах (целое число).
-func (c *Calculator) Duration(distanceKm float64) int {
+func (c *CalculatorImpl) Duration(distanceKm float64) int {
 	if distanceKm <= 0 {
 		return 0
 	}
@@ -51,7 +59,7 @@ func (c *Calculator) Duration(distanceKm float64) int {
 }
 
 // рассчет предварительную стоимость поездки на основе тарифов
-func (c *Calculator) Fare(rideType string, distanceKm float64, durationMin int) float64 {
+func (c *CalculatorImpl) Fare(rideType string, distanceKm float64, durationMin int) float64 {
 	var baseFare, ratePerKm, ratePerMin float64
 
 	switch rideType {
@@ -76,7 +84,7 @@ func (c *Calculator) Fare(rideType string, distanceKm float64, durationMin int) 
 	return fare
 }
 
-func (c *Calculator) Priority(ride *models.Ride) int {
+func (c *CalculatorImpl) Priority(ride *models.Ride) int {
 	priority := 1
 
 	// Правило №1: Час пик
@@ -103,7 +111,7 @@ func (c *Calculator) Priority(ride *models.Ride) int {
 }
 
 // getEstimatedArrival calculates the estimated arrival time based on distance and average speed.
-func (c *Calculator) EstimatedArrival(startLat, startLon, destLat, destLon float64, vehicleClass types.VehicleClass) time.Time {
+func (c *CalculatorImpl) EstimatedArrival(startLat, startLon, destLat, destLon float64, vehicleClass types.VehicleClass) time.Time {
 	distanceKm := c.Distance(
 		models.Location{
 			Latitude:  startLat,

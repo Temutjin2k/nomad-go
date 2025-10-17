@@ -20,10 +20,10 @@ type RideService struct {
 	logger    logger.Logger
 	trm       trm.TxManager
 	publisher RideMsgBroker
-	calculate *ridecalc.Calculator
+	calculate ridecalc.Calculator
 }
 
-func NewRideService(repo RideRepo, calculate *ridecalc.Calculator, logger logger.Logger, trm trm.TxManager, publisher RideMsgBroker) *RideService {
+func NewRideService(repo RideRepo, calculate ridecalc.Calculator, logger logger.Logger, trm trm.TxManager, publisher RideMsgBroker) *RideService {
 	return &RideService{
 		repo:      repo,
 		logger:    logger,

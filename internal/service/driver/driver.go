@@ -24,7 +24,7 @@ type Service struct {
 	repos         repos
 	publisher     Publisher
 	addressGetter GeoCoder
-	calculate     *ridecalc.Calculator
+	calculate     ridecalc.Calculator
 	trm           trm.TxManager
 	l             logger.Logger
 }
@@ -38,7 +38,7 @@ type repos struct {
 }
 
 // New returns a new instance of the driver service with all dependencies injected.
-func New(driverRepo DriverRepo, sessionRepo DriverSessionRepo, coordinateRepo CoordinateRepo, userRepo UserRepo, rideRepo RideRepo, addressGetter GeoCoder, publisher Publisher, calculate *ridecalc.Calculator, trm trm.TxManager, l logger.Logger) *Service {
+func New(driverRepo DriverRepo, sessionRepo DriverSessionRepo, coordinateRepo CoordinateRepo, userRepo UserRepo, rideRepo RideRepo, addressGetter GeoCoder, publisher Publisher, calculate ridecalc.Calculator, trm trm.TxManager, l logger.Logger) *Service {
 	return &Service{
 		repos: repos{
 			driver:     driverRepo,
