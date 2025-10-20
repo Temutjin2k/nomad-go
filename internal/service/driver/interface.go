@@ -34,7 +34,8 @@ type DriverSessionRepo interface {
 /*=================Coordinate Repository==========================*/
 
 type CoordinateRepo interface {
-	Create(ctx context.Context, entityID uuid.UUID, entityType types.EntityType, address string, latitude, longitude float64) (uuid.UUID, error)
+	CreateCoordinate(ctx context.Context, entityID uuid.UUID, entityType types.EntityType, location models.Location, updatedAt time.Time) (uuid.UUID, error)
+	CreateLocationHistory(ctx context.Context, coordinateID, driverID uuid.UUID, rideID *uuid.UUID, location models.Location, accuracyMeters, speedKmh, headingDegrees float64) (uuid.UUID, error)
 	GetDriverLastCoordinate(ctx context.Context, driverID uuid.UUID) (models.Location, error)
 }
 
@@ -67,6 +68,7 @@ type RideGetter interface {
 }
 
 /*========================Publisher===============================*/
+
 type Publisher interface {
 	PublishDriverStatus(ctx context.Context, msg models.DriverStatusUpdateMessage) error
 	PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error

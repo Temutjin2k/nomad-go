@@ -21,12 +21,20 @@ Service provides all business logic for driver management,
 including registration, session handling, coordinate storage, etc.
 */
 type Service struct {
-	repos         repos
-	publisher     Publisher
+	repos repos
+	logic logic
+	infra infra
+	l     logger.Logger
+}
+
+type logic struct {
+	calculate ridecalc.Calculator
+}
+
+type infra struct {
 	addressGetter GeoCoder
-	calculate     ridecalc.Calculator
+	publisher     Publisher
 	trm           trm.TxManager
-	l             logger.Logger
 }
 
 type repos struct {
@@ -47,11 +55,15 @@ func New(driverRepo DriverRepo, sessionRepo DriverSessionRepo, coordinateRepo Co
 			user:       userRepo,
 			ride:       rideRepo,
 		},
-		addressGetter: addressGetter,
-		publisher:     publisher,
-		calculate:     calculate,
-		trm:           trm,
-		l:             l,
+		logic: logic{
+			calculate: calculate,
+		},
+		infra: infra{
+			addressGetter: addressGetter,
+			publisher:     publisher,
+			trm:           trm,
+		},
+		l: l,
 	}
 }
 
@@ -110,7 +122,7 @@ func (s *Service) Register(ctx context.Context, newDriver *models.Driver) error 
 	}
 
 	// Execute inside transaction
-	if err := s.trm.Do(ctx, fn); err != nil {
+	if err := s.infra.trm.Do(ctx, fn); err != nil {
 		return err
 	}
 
@@ -183,13 +195,13 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location mod
 		}
 
 		// Reverse geocoding: get address by latitude and longitude
-		address, err := s.addressGetter.GetAddress(ctx, location.Longitude, location.Latitude)
+		location.Address, err = s.infra.addressGetter.GetAddress(ctx, location.Longitude, location.Latitude)
 		if err != nil {
 			s.l.Warn(ctx, "Failed to get address", "error", err.Error())
 		}
 
 		// Save driver’s coordinates in the DB
-		if _, err := s.repos.coordinate.Create(ctx, driverID, types.Driver, address, location.Latitude, location.Longitude); err != nil {
+		if _, err := s.repos.coordinate.CreateCoordinate(ctx, driverID, types.Driver, location, time.Now()); err != nil {
 			return wrap.Error(ctx, fmt.Errorf("failed to insert new coordinate data: %w", err))
 		}
 
@@ -197,7 +209,7 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location mod
 	}
 
 	// Execute logic within transaction
-	if err := s.trm.Do(ctx, fn); err != nil {
+	if err := s.infra.trm.Do(ctx, fn); err != nil {
 		return uuid.UUID{}, err
 	}
 
@@ -248,7 +260,7 @@ func (s *Service) GoOffline(ctx context.Context, driverID uuid.UUID) (models.Ses
 	}
 
 	// Execute logic within transaction
-	if err := s.trm.Do(ctx, fn); err != nil {
+	if err := s.infra.trm.Do(ctx, fn); err != nil {
 		return models.SessionSummary{}, err
 	}
 
@@ -296,7 +308,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 		}
 
 		// Calculate estimated arrival time to pickup location
-		estimatedArrival := s.calculate.EstimatedArrival(location.Latitude, location.Longitude, lastcord.Latitude, lastcord.Longitude, driver.Vehicle.Type)
+		estimatedArrival := s.logic.calculate.EstimatedArrival(location.Latitude, location.Longitude, lastcord.Latitude, lastcord.Longitude, driver.Vehicle.Type)
 
 		// Change driver status in database
 		if _, err := s.repos.driver.ChangeStatus(ctx, driverID, types.StatusDriverBusy); err != nil {
@@ -304,13 +316,13 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 		}
 
 		// Get address by geocoding
-		address, err := s.addressGetter.GetAddress(ctx, location.Longitude, location.Latitude)
+		location.Address, err = s.infra.addressGetter.GetAddress(ctx, location.Longitude, location.Latitude)
 		if err != nil {
 			s.l.Warn(ctx, "Failed to get address", "error", err.Error())
 		}
 
 		// Save driver’s coordinates in the DB
-		if _, err := s.repos.coordinate.Create(ctx, driverID, types.Driver, address, location.Latitude, location.Longitude); err != nil {
+		if _, err := s.repos.coordinate.CreateCoordinate(ctx, driverID, types.Driver, location, time.Now()); err != nil {
 			return wrap.Error(ctx, fmt.Errorf("failed to insert new coordinate data: %w", err))
 		}
 
@@ -333,7 +345,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 
 		// Publish ride status
 		if err := retry(5, 2*time.Second, func() error {
-			return s.publisher.PublishRideStatus(
+			return s.infra.publisher.PublishRideStatus(
 				ctx,
 				models.RideStatusUpdateMessage{
 					RideID:        rideID,
@@ -349,7 +361,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 
 		// Publish driver status
 		if err := retry(5, 2*time.Second, func() error {
-			return s.publisher.PublishDriverStatus(
+			return s.infra.publisher.PublishDriverStatus(
 				ctx,
 				models.DriverStatusUpdateMessage{
 					DriverID:  driverID,
@@ -364,7 +376,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 		return nil
 	}
 
-	if err := s.trm.Do(ctx, fn); err != nil {
+	if err := s.infra.trm.Do(ctx, fn); err != nil {
 		return err
 	}
 
@@ -423,18 +435,18 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 		}
 
 		// Get address by geocoding
-		address, err := s.addressGetter.GetAddress(ctx, data.Location.Longitude, data.Location.Latitude)
+		data.Location.Address, err = s.infra.addressGetter.GetAddress(ctx, data.Location.Longitude, data.Location.Latitude)
 		if err != nil {
 			s.l.Warn(ctx, "Failed to get address", "error", err.Error())
 		}
 
 		// Save driver’s coordinates in the DB
-		if _, err := s.repos.coordinate.Create(ctx, data.DriverID, types.Driver, address, data.Location.Latitude, data.Location.Longitude); err != nil {
+		if _, err := s.repos.coordinate.CreateCoordinate(ctx, data.DriverID, types.Driver, data.Location, data.CompleteTime); err != nil {
 			return wrap.Error(ctx, fmt.Errorf("failed to insert new coordinate data: %w", err))
 		}
 
 		// Calculate fare
-		distance := s.calculate.Distance(models.Location{
+		distance := s.logic.calculate.Distance(models.Location{
 			Latitude:  data.Location.Latitude,
 			Longitude: data.Location.Longitude,
 		},
@@ -443,8 +455,8 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 				Longitude: lastcord.Longitude,
 			},
 		)
-		durationMin := s.calculate.Duration(distance)
-		earnings = s.calculate.Fare(ride.RideType, distance, durationMin)
+		durationMin := s.logic.calculate.Duration(distance)
+		earnings = s.logic.calculate.Fare(ride.RideType, distance, durationMin)
 
 		// Update ride status to COMPLETED
 		if err := s.repos.ride.CompleteRide(ctx, rideID, data.DriverID, data.CompleteTime,
@@ -469,7 +481,7 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 
 		// Publish ride status update
 		if err := retry(5, 2*time.Second, func() error {
-			return s.publisher.PublishRideStatus(
+			return s.infra.publisher.PublishRideStatus(
 				ctx,
 				models.RideStatusUpdateMessage{
 					RideID:        rideID,
@@ -484,7 +496,7 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 
 		// Publish driver status update
 		if err := retry(5, 2*time.Second, func() error {
-			return s.publisher.PublishDriverStatus(
+			return s.infra.publisher.PublishDriverStatus(
 				ctx,
 				models.DriverStatusUpdateMessage{
 					DriverID:  data.DriverID,
@@ -499,9 +511,56 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 		return nil
 	}
 
-	if err := s.trm.Do(ctx, fn); err != nil {
+	if err := s.infra.trm.Do(ctx, fn); err != nil {
 		return 0, err
 	}
 
 	return earnings, nil
+}
+
+type UpdateLocationData struct {
+	UpdateTime     time.Time
+	Location       models.Location
+	RideID         uuid.UUID
+	AccuracyMeters float64
+	SpeedKmH       float64
+	HeadingDegrees float64
+}
+
+func (s *Service) UpdateLocation(ctx context.Context, driverID uuid.UUID, data UpdateLocationData) (coordinateID uuid.UUID, err error) {
+	fn := func(ctx context.Context) error {
+		ctx = wrap.WithAction(ctx, "update_driver_location")
+
+		// Check if driver exists in DB
+		exist, err := s.repos.driver.IsDriverExist(ctx, driverID)
+		if err != nil {
+			return wrap.Error(ctx, fmt.Errorf("failed to check driver existence: %w", err))
+		}
+		if !exist {
+			return wrap.Error(ctx, types.ErrUserNotFound)
+		}
+
+		// Get address by geocoding
+		data.Location.Address, err = s.infra.addressGetter.GetAddress(ctx, data.Location.Longitude, data.Location.Latitude)
+		if err != nil {
+			s.l.Warn(ctx, "Failed to get address", "error", err.Error())
+		}
+
+		coordinateID, err = s.repos.coordinate.CreateCoordinate(ctx, driverID, types.Driver, data.Location, data.UpdateTime)
+		if err != nil {
+			return wrap.Error(ctx, fmt.Errorf("failed to insert new coordinate data: %w", err))
+		}
+
+		if _, err := s.repos.coordinate.CreateLocationHistory(ctx, coordinateID, driverID, nil, data.Location, data.AccuracyMeters, data.SpeedKmH, data.HeadingDegrees); err != nil {
+			return wrap.Error(ctx, fmt.Errorf("failed to create location history: %w", err))
+		}
+
+		return nil
+	}
+
+	if err := s.infra.trm.Do(ctx, fn); err != nil {
+		return uuid.UUID{}, err
+	}
+
+	return coordinateID, nil
 }

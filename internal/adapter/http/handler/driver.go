@@ -26,6 +26,7 @@ type DriverService interface {
 	GoOffline(ctx context.Context, driverID uuid.UUID) (models.SessionSummary, error)
 	StartRide(ctx context.Context, startTime time.Time, driverID, rideID uuid.UUID, location models.Location) error
 	CompleteRide(ctx context.Context, rideID uuid.UUID, data drivergo.CompleteRideData) (earnings float64, err error)
+	UpdateLocation(ctx context.Context, driverID uuid.UUID, data drivergo.UpdateLocationData) (coordinateID uuid.UUID, err error)
 }
 
 func NewDriver(service DriverService, l logger.Logger) *Driver {
@@ -148,7 +149,7 @@ func (h *Driver) GoOffline(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	if err := writeJSON(w, http.StatusCreated, response, nil); err != nil {
+	if err := writeJSON(w, http.StatusOK, response, nil); err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write response", err)
 		internalErrorResponse(w, err.Error())
 		return
@@ -270,4 +271,62 @@ func (h *Driver) CompleteRide(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.l.Info(ctx, "ride finished successfully", "driver_id", driverID, "ride_id", req.RideID)
+}
+
+func (h *Driver) UpdateLocation(w http.ResponseWriter, r *http.Request) {
+	ctx := wrap.WithAction(r.Context(), "update_driver_location")
+
+	driverID, err := uuid.Parse(r.PathValue("driver_id"))
+	if err != nil {
+		h.l.Warn(ctx, "invalid driver uuid format")
+		errorResponse(w, http.StatusBadRequest, "invalid driver uuid format")
+		return
+	}
+
+	var req dto.UpdateLocationReq
+	if err := readJSON(w, r, &req); err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to read request JSON data", err)
+		errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	v := validator.New()
+	req.Validate(v)
+	if !v.Valid() {
+		h.l.Warn(ctx, "invalid request data")
+		failedValidationResponse(w, v.Errors)
+		return
+	}
+
+	now := time.Now()
+
+	coordinateID, err := h.service.UpdateLocation(ctx, driverID,
+		drivergo.UpdateLocationData{
+			Location: models.Location{
+				Latitude:  *req.Latitude,
+				Longitude: *req.Longitude,
+			},
+			UpdateTime:     now,
+			AccuracyMeters: req.AccuracyMeters,
+			SpeedKmH:       req.SpeedKmH,
+			HeadingDegrees: req.HeadingDegrees,
+		})
+	if err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to update driver location", err)
+		errorResponse(w, GetCode(err), err.Error())
+		return
+	}
+
+	response := envelope{
+		"coordinate_id": coordinateID,
+		"updated_at":    now,
+	}
+
+	if err := writeJSON(w, http.StatusOK, response, nil); err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write response", err)
+		internalErrorResponse(w, err.Error())
+		return
+	}
+
+	h.l.Info(ctx, "driver location has been updated", "driver_id", driverID, "coordinate_id", coordinateID)
 }

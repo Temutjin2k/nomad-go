@@ -16,7 +16,7 @@ type Driver struct {
 	Vehicle       Vehicle            // embedded struct for vehicle details
 	Rating        float64            // average rating from passengers
 	TotalRides    int                // number of completed rides
-	TotalEarnings int                // in smallest currency unit, e.g., tyin for KZT, cents for USD
+	TotalEarnings float64            // in smallest currency unit, e.g., tyin for KZT, cents for USD
 	Status        types.DriverStatus // e.g., "available", "on_trip", "offline"
 	IsVerified    bool               // Indicates if the driver's documents have been verified
 }

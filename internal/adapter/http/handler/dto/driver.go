@@ -102,3 +102,17 @@ func (r *CompleteRideReq) Validate(v *validator.Validator) {
 	v.Check(r.ActualDurationMin > 0, "actual_duration_minutes", "must be positive integer")
 	r.FinalLocation.Validate(v)
 }
+
+type UpdateLocationReq struct {
+	CoordinateUpdateReq
+	AccuracyMeters float64 `json:"accuracy_meters"`
+	SpeedKmH       float64 `json:"speed_kmh"`
+	HeadingDegrees float64 `json:"heading_degrees"`
+}
+
+func (r *UpdateLocationReq) Validate(v *validator.Validator) {
+	v.Check(r.AccuracyMeters > 0, "accuracy_meters", "must be positive float")
+	v.Check(r.SpeedKmH > 0, "speed_kmh", "must be positive float")
+	v.Check(r.HeadingDegrees >= 0 && r.HeadingDegrees <= 360, "heading_degrees", "must be between 0 and 360")
+	r.CoordinateUpdateReq.Validate(v)
+}

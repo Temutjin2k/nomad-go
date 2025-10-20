@@ -13,6 +13,8 @@ import (
 // UUID — 16 байт
 type UUID [16]byte
 
+var NilUUID = UUID{}
+
 // New возвращает новый UUID v4
 func New() UUID {
 	var u UUID
