@@ -14,10 +14,11 @@ import (
 type DriverRepo interface {
 	LicenseChecker
 	Create(ctx context.Context, driver *models.Driver) error
+	IsDriverExist(ctx context.Context, id uuid.UUID) (bool, error)
 	Get(ctx context.Context, driverID uuid.UUID) (*models.Driver, error)
+	SearchDrivers(ctx context.Context, rideType string, pickUplocation models.Location) ([]models.Driver, error)
 	ChangeStatus(ctx context.Context, driverID uuid.UUID, newStatus types.DriverStatus) (oldStatus types.DriverStatus, err error)
 	UpdateStats(ctx context.Context, driverID uuid.UUID, ridesCompleted int, earnings float64) error
-	IsDriverExist(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
 type LicenseChecker interface {
@@ -72,4 +73,8 @@ type RideGetter interface {
 type Publisher interface {
 	PublishDriverStatus(ctx context.Context, msg models.DriverStatusUpdateMessage) error
 	PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error
+}
+
+type Sender interface {
+	Send(clientID string, data models.RideRequestedMessage) error
 }
