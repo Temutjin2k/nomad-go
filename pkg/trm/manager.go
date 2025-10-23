@@ -10,6 +10,7 @@ import (
 
 type TxManager interface {
 	Do(ctx context.Context, fn func(ctx context.Context) error) error
+	DoReadOnly(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 // Manager implements a transaction manager using pgx
@@ -75,30 +76,43 @@ func (m *Manager) Do(ctx context.Context, fn func(ctx context.Context) error) (e
 // If a transaction exists, it creates a SAVEPOINT (nested transaction).
 // If no transaction exists, it starts a NEW transaction and adds it to the context.
 func (m *Manager) getTransactionFromContext(ctx context.Context) (pgx.Tx, context.Context, error) {
-	// Check if a transaction already exists in the context
-	if tx := ctx.Value(TxKey); tx != nil {
-		// If transaction exists, return it
-		if tx, ok := tx.(pgx.Tx); ok {
-			return tx, ctx, nil
+    // 1. Check if a transaction already exists in the context
+	if tx, ok := ctx.Value(TxKey).(pgx.Tx); ok {
+        // 2. Yes! This means it's a nested call.
+        // Create a Savepoint
+		savepoint, err := tx.Begin(ctx)
+		if err != nil {
+			return nil, ctx, fmt.Errorf("failed to create savepoint: %w", err)
 		}
-		return nil, ctx, fmt.Errorf("invalid transaction type in context")
+
+        // Return the savepoint (which is also pgx.Tx) and the ORIGINAL ctx.
+		return savepoint, ctx, nil
 	}
 
-	// If transaction does not exist, start a new one
+    // 3. No! This means it's a top-level call.
+    // Create a NEW transaction, CHECKING OPTIONS.
+
+	if opt, ok := ctx.Value(txOptions).(pgx.TxOptions); ok {
+		tx, err := m.db.BeginTx(ctx, opt)
+		if err != nil {
+			return nil, ctx, fmt.Errorf("failed to start new transaction with options: %w", err)
+		}
+        // Key point: put the NEW transaction in ctx
+		ctx = context.WithValue(ctx, TxKey, tx)
+		return tx, ctx, nil
+	}
+
+    // No options, just start a transaction
 	tx, err := m.db.Begin(ctx)
 	if err != nil {
 		return nil, ctx, fmt.Errorf("failed to start new transaction: %w", err)
 	}
 
-	// Save the new transaction in the context
+	// Key point: put the NEW transaction in ctx
 	ctx = context.WithValue(ctx, TxKey, tx)
 
-	// Return the new transaction and the UPDATED context
+	// Return the new transaction and the UPDATED ctx
 	return tx, ctx, nil
-}
-
-func WithOptionsCtx(ctx context.Context, opt pgx.TxOptions) context.Context {
-	return context.WithValue(ctx, txOptions, opt)
 }
 
 // DoReadOnly executes the provided function within a read-only transaction context.
