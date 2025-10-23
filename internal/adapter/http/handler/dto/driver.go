@@ -86,3 +86,19 @@ func (r *StartRideReq) Validate(v *validator.Validator) {
 	v.Check(r.RideID != uuid.UUID{}, "ride_id", "must be provided")
 	r.DriverLocation.Validate(v)
 }
+
+type CompleteRideReq struct {
+	RideID            uuid.UUID           `json:"ride_id"`
+	FinalLocation     CoordinateUpdateReq `json:"final_location"`
+	ActualDistanceKm  float64             `json:"actual_distance_km"`
+	ActualDurationMin int                 `json:"actual_duration_minutes"`
+}
+
+func (r *CompleteRideReq) Validate(v *validator.Validator) {
+	v.Check(r.RideID != uuid.UUID{}, "ride_id", "must be provided")
+	v.Check(r.ActualDistanceKm != 0, "actual_distance_km", "must be provided")
+	v.Check(r.ActualDurationMin != 0, "actual_duration_minutes", "must be provided")
+	v.Check(r.ActualDistanceKm > 0, "actual_distance_km", "must be positive float")
+	v.Check(r.ActualDurationMin > 0, "actual_duration_minutes", "must be positive integer")
+	r.FinalLocation.Validate(v)
+}

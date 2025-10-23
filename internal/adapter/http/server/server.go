@@ -39,6 +39,7 @@ type handlers struct {
 func New(
 	cfg config.Config,
 	driverService handler.DriverService,
+	rideService handler.RideService,
 	adminService handler.AdminService,
 	authService handler.AuthService,
 	logger logger.Logger,
@@ -53,7 +54,7 @@ func New(
 	switch cfg.Mode {
 	case types.RideService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.RideService)
-		handlers.ride = handler.NewRide(logger)
+		handlers.ride = handler.NewRide(logger, rideService)
 	case types.DriverAndLocationService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.DriverLocationService)
 		handlers.driver = handler.NewDriver(driverService, logger)

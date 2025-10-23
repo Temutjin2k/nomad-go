@@ -8,6 +8,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler/dto"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
+	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
@@ -21,9 +22,10 @@ type Driver struct {
 
 type DriverService interface {
 	Register(ctx context.Context, newDriver *models.Driver) error
-	GoOnline(ctx context.Context, driverID uuid.UUID, latitude, longitude float64) (sessionID uuid.UUID, err error)
+	GoOnline(ctx context.Context, driverID uuid.UUID, location models.Location) (sessionID uuid.UUID, err error)
 	GoOffline(ctx context.Context, driverID uuid.UUID) (models.SessionSummary, error)
-	StartRide(ctx context.Context, startTime time.Time, driverID, rideID uuid.UUID, latitude, longitude float64) error
+	StartRide(ctx context.Context, startTime time.Time, driverID, rideID uuid.UUID, location models.Location) error
+	CompleteRide(ctx context.Context, rideID uuid.UUID, data drivergo.CompleteRideData) (earnings float64, err error)
 }
 
 func NewDriver(service DriverService, l logger.Logger) *Driver {
@@ -96,7 +98,7 @@ func (h *Driver) GoOnline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionID, err := h.service.GoOnline(ctx, driverID, *goOnlineReq.Latitude, *goOnlineReq.Longitude)
+	sessionID, err := h.service.GoOnline(ctx, driverID, models.Location{Latitude: *goOnlineReq.Latitude, Longitude: *goOnlineReq.Longitude})
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to set driver status to online", err)
 		errorResponse(w, GetCode(err), err.Error())
@@ -181,7 +183,13 @@ func (h *Driver) StartRide(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
-	if err := h.service.StartRide(ctx, now, driverID, req.RideID, *req.DriverLocation.Latitude, *req.DriverLocation.Longitude); err != nil {
+	if err := h.service.StartRide(
+		ctx, now, driverID, req.RideID,
+		models.Location{
+			Latitude:  *req.DriverLocation.Latitude,
+			Longitude: *req.DriverLocation.Longitude,
+		},
+	); err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to start ride", err)
 		errorResponse(w, GetCode(err), err.Error())
 		return
@@ -201,4 +209,65 @@ func (h *Driver) StartRide(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.l.Info(ctx, "ride started successfully", "driver_id", driverID, "ride_id", req.RideID)
+}
+
+func (h *Driver) CompleteRide(w http.ResponseWriter, r *http.Request) {
+	ctx := wrap.WithAction(r.Context(), "complete_ride")
+
+	driverID, err := uuid.Parse(r.PathValue("driver_id"))
+	if err != nil {
+		h.l.Warn(ctx, "invalid driver uuid format")
+		errorResponse(w, http.StatusBadRequest, "invalid driver uuid format")
+		return
+	}
+
+	var req dto.CompleteRideReq
+	if err := readJSON(w, r, &req); err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to read request JSON data", err)
+		errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	v := validator.New()
+	req.Validate(v)
+	if !v.Valid() {
+		h.l.Warn(ctx, "invalid request data")
+		failedValidationResponse(w, v.Errors)
+		return
+	}
+
+	now := time.Now()
+	earnings, err := h.service.CompleteRide(
+		ctx, req.RideID,
+		drivergo.CompleteRideData{
+			CompleteTime:      now,
+			DriverID:          driverID,
+			ActualDurationMin: req.ActualDurationMin,
+			ActualDistanceKm:  req.ActualDistanceKm,
+			Location: models.Location{
+				Latitude:  *req.FinalLocation.Latitude,
+				Longitude: *req.FinalLocation.Longitude,
+			},
+		})
+	if err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to complete ride", err)
+		errorResponse(w, GetCode(err), err.Error())
+		return
+	}
+
+	response := envelope{
+		"ride_id":         req.RideID,
+		"status":          types.StatusDriverAvailable,
+		"completed_at":    now,
+		"driver_earnings": earnings,
+		"message":         "Ride completed successfully",
+	}
+
+	if err := writeJSON(w, http.StatusOK, response, nil); err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write response", err)
+		internalErrorResponse(w, err.Error())
+		return
+	}
+
+	h.l.Info(ctx, "ride finished successfully", "driver_id", driverID, "ride_id", req.RideID)
 }

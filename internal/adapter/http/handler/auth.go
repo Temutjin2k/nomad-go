@@ -59,7 +59,7 @@ func (h *Auth) Register(w http.ResponseWriter, r *http.Request) {
 	response := envelope{"id": id}
 	if err := writeJSON(w, http.StatusCreated, response, nil); err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write JSON response", err)
-		errorResponse(w, http.StatusInternalServerError, "failed to write JSON response")
+		internalErrorResponse(w, "failed to write JSON response")
 	}
 }
 
@@ -93,7 +93,7 @@ func (h *Auth) Login(w http.ResponseWriter, r *http.Request) {
 
 	if err := writeJSON(w, http.StatusOK, response, nil); err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write JSON response", err)
-		errorResponse(w, http.StatusInternalServerError, "failed to write JSON response")
+		internalErrorResponse(w, "failed to write JSON response")
 	}
 }
 
@@ -127,6 +127,26 @@ func (h *Auth) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	if err := writeJSON(w, http.StatusOK, response, nil); err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write JSON response", err)
-		errorResponse(w, http.StatusInternalServerError, "failed to write JSON response")
+		internalErrorResponse(w, "failed to write JSON response")
+	}
+}
+
+func (h *Auth) Profile(w http.ResponseWriter, r *http.Request) {
+	ctx := wrap.WithAction(r.Context(), "get_profile")
+
+	user := models.UserFromContext(ctx)
+	if user == nil {
+		h.l.Warn(ctx, "failed to get profile")
+		errorResponse(w, http.StatusNotFound, "")
+		return
+	}
+
+	response := envelope{
+		"user": user,
+	}
+
+	if err := writeJSON(w, http.StatusOK, response, nil); err != nil {
+		h.l.Error(ctx, "failed to write JSON response", err)
+		internalErrorResponse(w, "failed to write JSON response")
 	}
 }

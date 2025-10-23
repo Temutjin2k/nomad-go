@@ -75,6 +75,7 @@ func (s *AuthService) Register(ctx context.Context, user *models.UserCreateReque
 		Role:         types.RolePassenger.String(),
 		PasswordHash: hashPassword,
 		Status:       types.StatusUserActive.String(),
+		Attrs:        user.Attrs,
 	}
 
 	id, err := s.userRepo.CreateUser(ctx, &newUser)

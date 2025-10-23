@@ -1,21 +1,26 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 
 	t "github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	authSvc "github.com/Temutjin2k/ride-hail-system/internal/service/auth"
+	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
+	"github.com/jackc/pgx/v5"
 )
 
 type envelope map[string]any
 
-func writeJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
+func writeJSON(w http.ResponseWriter, status int, data any, headers http.Header) error {
 	js, err := json.Marshal(data)
 	if err != nil {
 		return errors.New("failed to encode json")
@@ -94,26 +99,100 @@ func readJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 
 func GetCode(err error) int {
 	switch {
-	case IsOneOf(err, t.ErrInvalidLicenseFormat):
+	case oneOf(err,
+		t.ErrInvalidLicenseFormat,
+		t.ErrDriverAlreadyOffline,
+		t.ErrDriverAlreadyOnline,
+		t.ErrLicenseAlreadyExists,
+	):
 		return http.StatusBadRequest
-	case IsOneOf(err, t.ErrUserNotFound, t.ErrSessionNotFound, t.ErrNoCoordinates, t.ErrRideNotFound, t.ErrDriverLocationNotFound):
+
+	case oneOf(err,
+		t.ErrUserNotFound,
+		t.ErrSessionNotFound,
+		t.ErrNoCoordinates,
+		t.ErrRideNotFound,
+		t.ErrDriverLocationNotFound,
+		sql.ErrNoRows,
+		pgx.ErrNoRows,
+	):
 		return http.StatusNotFound
-	case IsOneOf(err, t.ErrLicenseAlreadyExists, t.ErrDriverRegistered, t.ErrDriverAlreadyOnline, t.ErrDriverAlreadyOffline, t.ErrDriverMustBeAvailable, authSvc.ErrNotUniqueEmail, t.ErrDriverAlreadyOnRide, t.ErrRideDriverMismatch, t.ErrRideNotArrived):
+
+	case oneOf(err,
+		t.ErrDriverRegistered,
+		t.ErrDriverMustBeAvailable,
+		authSvc.ErrNotUniqueEmail,
+		t.ErrDriverAlreadyOnRide,
+		t.ErrRideDriverMismatch,
+		t.ErrRideNotArrived,
+		t.ErrDriverMustBeEnRoute,
+		t.ErrRideNotInProgress,
+		t.ErrRideCannotBeCancelled,
+		t.ErrDriverMustBeBusy,
+	):
 		return http.StatusConflict
-	case IsOneOf(err, authSvc.ErrInvalidCredentials, authSvc.ErrInvalidToken, authSvc.ErrExpToken):
+
+	case oneOf(err,
+		authSvc.ErrInvalidCredentials,
+		authSvc.ErrInvalidToken,
+		authSvc.ErrExpToken,
+	):
 		return http.StatusUnauthorized
-	case IsOneOf(err, authSvc.ErrCannotCreateAdmin):
+
+	case oneOf(err, authSvc.ErrCannotCreateAdmin):
 		return http.StatusForbidden
+
 	default:
 		return http.StatusInternalServerError
 	}
 }
 
-func IsOneOf(err error, targets ...error) bool {
-	for _, target := range targets {
-		if errors.Is(err, target) {
+func oneOf(err error, targets ...error) bool {
+	for _, t := range targets {
+		if errors.Is(err, t) {
 			return true
 		}
 	}
 	return false
+}
+
+// The readString() helper returns a string value from the query string, or the provided
+// default value if no matching key could be found.
+func readString(qs url.Values, key string, defaultValue string) string {
+	// Extract the value for a given key from the query string. If no key exists this
+	// will return the empty string "".
+	s := qs.Get(key)
+
+	// If no key exists (or the value is empty) then return the default value.
+	if s == "" {
+		return defaultValue
+	}
+
+	// Otherwise return the string.
+	return s
+}
+
+// The readInt() helper reads a string value from the query string and converts it to an
+// integer before returning. If no matching key could be found it returns the provided
+// default value. If the value couldn't be converted to an integer, then we record an
+// error message in the provided Validator instance.
+func readInt(qs url.Values, key string, defaultValue int, v *validator.Validator) int {
+	// Extract the value from the query string.
+	s := qs.Get(key)
+
+	// If no key exists (or the value is empty) then return the default value.
+	if s == "" {
+		return defaultValue
+	}
+
+	// Try to convert the value to an int. If this fails, add an error message to the
+	// validator instance and return the default value.
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		v.AddError(key, "must be an integer value")
+		return defaultValue
+	}
+
+	// Otherwise, return the converted integer value.
+	return i
 }

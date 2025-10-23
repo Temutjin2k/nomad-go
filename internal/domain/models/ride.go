@@ -7,6 +7,8 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 )
 
+/* ======================= for admin service ======================= */
+
 type RideInfo struct {
 	RideID                uuid.UUID `json:"ride_id"`
 	RideNumber            string    `json:"ride_number"`
@@ -18,6 +20,7 @@ type RideInfo struct {
 	StartedAt             time.Time `json:"started_at"`
 	EstimatedCompletion   time.Time `json:"estimated_completion"`
 	CurrentDriverLocation Location  `json:"current_driver_location"`
+	DestinationLocation   Location  `json:"destination_location"`
 	DistanceCompletedKm   float64   `json:"distance_completed_km"`
 	DistanceRemainingKm   float64   `json:"distance_remaining_km"`
 }
@@ -30,17 +33,12 @@ type RideEvent struct {
 	EstimatedArrival time.Time        `json:"estimated_arrival"`
 }
 
-type RideStatusUpdateMessage struct {
-	RideID        uuid.UUID        `json:"ride_id"`
-	Status        types.RideStatus `json:"status"`
-	Timestamp     time.Time        `json:"timestamp"`
-	FinalFare     float64          `json:"final_fare,omitempty"`
-	CorrelationID string           `json:"correlation_id,omitempty"`
-}
+/* ======================= service ======================= */
 
 type Location struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
+	Address   string  `json:"address,omitempty"`
 }
 
 type Ride struct {
@@ -57,6 +55,7 @@ type Ride struct {
 	EstimatedFare        float64
 	EstimatedDurationMin int
 	EstimatedDistanceKm  float64
+	Priority             int
 
 	// Финальная стоимость.
 	FinalFare *float64
@@ -71,4 +70,33 @@ type Ride struct {
 	StartedAt   *time.Time
 	CompletedAt *time.Time
 	CancelledAt *time.Time
+}
+
+/* ======================= rabbitmq ======================= */
+
+type LocationMessage struct {
+	Lat     float64 `json:"lat"`
+	Lng     float64 `json:"lng"`
+	Address string  `json:"address"`
+}
+
+type RideRequestedMessage struct {
+	RideID              uuid.UUID       `json:"ride_id"`
+	RideNumber          string          `json:"ride_number"`
+	PickupLocation      LocationMessage `json:"pickup_location"`
+	DestinationLocation LocationMessage `json:"destination_location"`
+	RideType            string          `json:"ride_type"`
+	EstimatedFare       float64         `json:"estimated_fare"`
+	MaxDistanceKm       float64         `json:"max_distance_km"`
+	TimeoutSeconds      int             `json:"timeout_seconds"`
+	CorrelationID       string          `json:"correlation_id"`
+}
+
+type RideStatusUpdateMessage struct {
+	RideID        uuid.UUID  `json:"ride_id"`
+	Status        string     `json:"status"`
+	Timestamp     time.Time  `json:"timestamp"`
+	DriverID      *uuid.UUID `json:"driver_id,omitempty"`
+	CorrelationID string     `json:"correlation_id"`
+	FinalFare     float64    `json:"final_fare"`
 }

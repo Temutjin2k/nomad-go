@@ -7,11 +7,12 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
+	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
 )
 
 type AdminService interface {
-	GetOverview(ctx context.Context) (any, error)
-	GetActiveRides(ctx context.Context) (*models.ActiveRidesResponse, error)
+	Overview(ctx context.Context) (*models.OverviewResponse, error)
+	ActiveRides(ctx context.Context, filters models.Filters) (*models.ActiveRidesResponse, error)
 }
 
 type Admin struct {
@@ -30,31 +31,51 @@ func (h *Admin) GetOverview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = wrap.WithAction(ctx, "admin_get_overview")
 
-	res, err := h.s.GetOverview(ctx)
+	overview, err := h.s.Overview(ctx)
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to get overview", err)
-		internalErrorResponse(w, err.Error())
+		errorResponse(w, GetCode(err), err.Error())
 		return
 	}
 
-	if err := writeJSON(w, http.StatusOK, envelope{"data": res}, nil); err != nil {
+	h.l.Debug(ctx, "fetched overview", "metrics", overview.Metrics)
+
+	if err := writeJSON(w, http.StatusOK, overview, nil); err != nil {
 		h.l.Error(ctx, "failed to write response", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
+var activeRidesSortSafeList = []string{"ride_number", "started_at", "estimated_completion", "created_at", "-ride_number", "-started_at", "-estimated_completion", "-created_at"}
+
 func (h *Admin) GetActiveRides(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = wrap.WithAction(ctx, "admin_get_active_rides")
 
-	res, err := h.s.GetActiveRides(ctx)
+	v := validator.New()
+	qs := r.URL.Query()
+
+	// filter options
+	page := readInt(qs, "page", 1, v)
+	pageSize := readInt(qs, "page_size", 20, v)
+	sort := readString(qs, "sort", "created_at")
+
+	filters, err := models.NewFilters(page, pageSize, sort, activeRidesSortSafeList)
 	if err != nil {
-		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to get active rides", err)
-		internalErrorResponse(w, err.Error())
+		internalErrorResponse(w, "intenal error")
 		return
 	}
 
-	if err := writeJSON(w, http.StatusOK, envelope{"data": res}, nil); err != nil {
+	rides, err := h.s.ActiveRides(ctx, filters)
+	if err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to get active rides", err)
+		errorResponse(w, GetCode(err), err.Error())
+		return
+	}
+
+	h.l.Debug(ctx, "fetched active rides", "total", rides.Metadata.TotalRecords)
+
+	if err := writeJSON(w, http.StatusOK, rides, nil); err != nil {
 		h.l.Error(ctx, "failed to write response", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}

@@ -75,34 +75,16 @@ func (m *Manager) Do(ctx context.Context, fn func(ctx context.Context) error) (e
 // If a transaction exists, it creates a SAVEPOINT (nested transaction).
 // If no transaction exists, it starts a NEW transaction and adds it to the context.
 func (m *Manager) getTransactionFromContext(ctx context.Context) (pgx.Tx, context.Context, error) {
-	// 1. Check if a transaction (parent) already exists in the context
-	if tx, ok := ctx.Value(TxKey).(pgx.Tx); ok {
-		// 2. Yes! This is a nested call.
-		// Create a Savepoint (pgx.Tx.Begin() does this).
-		savepoint, err := tx.Begin(ctx)
-		if err != nil {
-			return nil, ctx, fmt.Errorf("failed to create savepoint: %w", err)
+	// Check if a transaction already exists in the context
+	if tx := ctx.Value(TxKey); tx != nil {
+		// If transaction exists, return it
+		if tx, ok := tx.(pgx.Tx); ok {
+			return tx, ctx, nil
 		}
-
-		// Return the savepoint (which is also a pgx.Tx) and the ORIGINAL context.
-		// We don't put the savepoint into the context; only the parent tx stays there.
-		return savepoint, ctx, nil
+		return nil, ctx, fmt.Errorf("invalid transaction type in context")
 	}
 
-	// 3. No! This is a top-level call.
-	// Create a NEW transaction.
-	// Check if transaction options are provided in the context
-	if opt, ok := ctx.Value(txOptions).(pgx.TxOptions); ok {
-		tx, err := m.db.BeginTx(ctx, opt)
-		if err != nil {
-			return nil, ctx, fmt.Errorf("failed to start new transaction with options: %w", err)
-		}
-		// Save the new transaction in the context
-		ctx = context.WithValue(ctx, TxKey, tx)
-		return tx, ctx, nil
-	}
-
-	// No options, just begin a standard transaction
+	// If transaction does not exist, start a new one
 	tx, err := m.db.Begin(ctx)
 	if err != nil {
 		return nil, ctx, fmt.Errorf("failed to start new transaction: %w", err)
@@ -113,6 +95,10 @@ func (m *Manager) getTransactionFromContext(ctx context.Context) (pgx.Tx, contex
 
 	// Return the new transaction and the UPDATED context
 	return tx, ctx, nil
+}
+
+func WithOptionsCtx(ctx context.Context, opt pgx.TxOptions) context.Context {
+	return context.WithValue(ctx, txOptions, opt)
 }
 
 // DoReadOnly executes the provided function within a read-only transaction context.
