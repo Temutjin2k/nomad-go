@@ -25,8 +25,10 @@ func New(db *pgxpool.Pool) *Manager {
 
 // Unique key for TX
 type ctxKeyTx struct{}
+type ctxTxOptions struct{}
 
 var TxKey = ctxKeyTx{}
+var txOptions = ctxTxOptions{}
 
 // Do executes the provided function within a transaction context.
 // It starts a new transaction if one does not already exist in the context.
@@ -71,7 +73,16 @@ func (m *Manager) getTransactionFromContext(ctx context.Context) (pgx.Tx, contex
 		return nil, ctx, fmt.Errorf("invalid transaction type in context")
 	}
 
-	// If transaction does not exist, start a new one
+	// Check if transaction options are provided in the context
+	if opt, ok := ctx.Value(txOptions).(pgx.TxOptions); ok {
+		tx, err := m.db.BeginTx(ctx, opt)
+		if err != nil {
+			return nil, ctx, fmt.Errorf("failed to start new transaction with options: %w", err)
+		}
+		ctx = context.WithValue(ctx, TxKey, tx)
+		return tx, ctx, nil
+	}
+
 	tx, err := m.db.Begin(ctx)
 	if err != nil {
 		return nil, ctx, fmt.Errorf("failed to start new transaction: %w", err)
@@ -82,4 +93,8 @@ func (m *Manager) getTransactionFromContext(ctx context.Context) (pgx.Tx, contex
 
 	// Return the new transaction and updated context
 	return tx, ctx, nil
+}
+
+func WithOptionsCtx(ctx context.Context, opt pgx.TxOptions) context.Context {
+	return context.WithValue(ctx, txOptions, opt)
 }

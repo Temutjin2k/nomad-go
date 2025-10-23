@@ -3,11 +3,8 @@ package models
 import "time"
 
 type ActiveRidesResponse struct {
-	Rides []RideInfo `json:"rides"`
-	// Pagination info
-	TotalCount int `json:"total_count"`
-	Page       int `json:"page"`
-	PageSize   int `json:"page_size"`
+	Rides    []RideInfo `json:"rides"`
+	Metadata Metadata   `json:"metadata"`
 }
 
 type OverviewResponse struct {

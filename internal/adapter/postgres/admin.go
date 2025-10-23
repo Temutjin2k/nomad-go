@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -189,82 +190,76 @@ func (r *AdminRepo) GetOverview(ctx context.Context) (*models.OverviewResponse, 
 	return resp, nil
 }
 
-func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResponse, error) {
-	const (
-		page     = 1
-		pageSize = 20
-	)
-	offset := (page - 1) * pageSize
+func (r *AdminRepo) GetActiveRides(ctx context.Context, filters models.Filters) (*models.ActiveRidesResponse, error) {
+	q := TxorDB(ctx, r.db)
 
-	db := TxorDB(ctx, r.db)
-
-	// 1) total_count
-	var totalCount int
-	if err := db.QueryRow(ctx, `
-        SELECT COUNT(*)
-        FROM rides
-        WHERE status IN ('REQUESTED','MATCHED','EN_ROUTE','ARRIVED','IN_PROGRESS')
-    `).Scan(&totalCount); err != nil {
-		return nil, err
+	// Build ORDER BY using safelisted sort column mapping to avoid ambiguity
+	var sortCol string
+	switch filters.SortColumn() {
+	case "ride_number":
+		sortCol = "r.ride_number"
+	case "started_at":
+		sortCol = "r.started_at"
+	case "estimated_completion":
+		sortCol = "estimated_completion"
+	case "created_at":
+		sortCol = "r.created_at"
+	default:
+		// fallback to created_at if something slips through
+		sortCol = "r.created_at"
 	}
+	orderBy := fmt.Sprintf("%s %s, r.id ASC", sortCol, filters.SortDirection())
 
-	// If no active rides, return empty response early
-	if totalCount == 0 {
-		return &models.ActiveRidesResponse{
-			Rides:      []models.RideInfo{},
-			TotalCount: 0,
-			Page:       page,
-			PageSize:   pageSize,
-		}, nil
-	}
-
-	// 2) данные по активным поездкам
-	//  - pickup/destination берём из coordinates по *_coordinate_id
-	//  - текущую точку водителя берём из coordinates по driver_id, entity_type='driver', is_current=true
-	//  - estimated_completion: если известен started_at и у текущей точки водителя есть duration_minutes, добавим их
-	//  - distance_completed_km заполним из coordinates.distance_km, если есть (иначе 0)
-	//  - distance_remaining_km пока 0 (нужна логика маршрута — можно будет доработать)
-	rows, err := db.Query(ctx, `
+	query := fmt.Sprintf(`
         WITH cur AS (
             SELECT entity_id, latitude, longitude, distance_km, duration_minutes
             FROM coordinates
             WHERE entity_type = 'driver' AND is_current = TRUE
         )
-		SELECT
-			r.id,
-			r.ride_number,
-			r.status,
-			r.passenger_id,
-			r.driver_id,
-			COALESCE(pc.address, '') AS pickup_address,
-			COALESCE(dc.address, '') AS destination_address,
-			dc.latitude AS destination_latitude,
-			dc.longitude AS destination_longitude,
-			r.started_at,
-			CASE
-				WHEN r.started_at IS NOT NULL AND cur.duration_minutes IS NOT NULL
-					THEN r.started_at + make_interval(mins => cur.duration_minutes)
-				ELSE NULL
-			END AS estimated_completion,
-			cur.latitude,
-			cur.longitude,
-			COALESCE(cur.distance_km, 0)::float AS distance_completed_km
-		FROM rides r
-		LEFT JOIN coordinates pc ON pc.id = r.pickup_coordinate_id
-		LEFT JOIN coordinates dc ON dc.id = r.destination_coordinate_id
-		LEFT JOIN cur ON cur.entity_id = r.driver_id
-		WHERE r.status IN ('REQUESTED','MATCHED','EN_ROUTE','ARRIVED','IN_PROGRESS')
-		ORDER BY r.created_at DESC
-		LIMIT $1 OFFSET $2
-	`, pageSize, offset)
+        SELECT
+            count(*) OVER() AS total_count,
+            r.id,
+            r.ride_number,
+            r.status,
+            r.passenger_id,
+            r.driver_id,
+            COALESCE(pc.address, '') AS pickup_address,
+            COALESCE(dc.address, '') AS destination_address,
+            dc.latitude AS destination_latitude,
+            dc.longitude AS destination_longitude,
+            r.started_at,
+            CASE
+                WHEN r.started_at IS NOT NULL AND cur.duration_minutes IS NOT NULL
+                    THEN r.started_at + make_interval(mins => cur.duration_minutes)
+                ELSE NULL
+            END AS estimated_completion,
+            cur.latitude,
+            cur.longitude,
+            COALESCE(cur.distance_km, 0)::float AS distance_completed_km
+        FROM rides r
+        LEFT JOIN coordinates pc ON pc.id = r.pickup_coordinate_id
+        LEFT JOIN coordinates dc ON dc.id = r.destination_coordinate_id
+        LEFT JOIN cur ON cur.entity_id = r.driver_id
+        WHERE r.status IN ('REQUESTED','MATCHED','EN_ROUTE','ARRIVED','IN_PROGRESS')
+        ORDER BY %s
+        LIMIT $1 OFFSET $2
+    `, orderBy)
+
+	limit := filters.Limit()
+	offset := filters.Offset()
+
+	rows, err := q.Query(ctx, query, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	rides := make([]models.RideInfo, 0, pageSize)
+	totalRecords := 0
+	rides := make([]models.RideInfo, 0, limit)
+
 	for rows.Next() {
 		var (
+			tr           int
 			rideID       uuid.UUID
 			rideNumber   string
 			status       string
@@ -282,6 +277,7 @@ func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResp
 		)
 
 		if err := rows.Scan(
+			&tr,
 			&rideID,
 			&rideNumber,
 			&status,
@@ -300,6 +296,8 @@ func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResp
 			return nil, err
 		}
 
+		totalRecords = tr
+
 		ri := models.RideInfo{
 			RideID:             rideID,
 			RideNumber:         rideNumber,
@@ -312,7 +310,6 @@ func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResp
 				Longitude: 0,
 			},
 			DistanceCompletedKm: distDoneKm,
-			// Нет прямого источника для оставшейся дистанции — оставляем 0.
 			DistanceRemainingKm: 0,
 		}
 
@@ -333,7 +330,6 @@ func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResp
 		if lonNull.Valid {
 			ri.CurrentDriverLocation.Longitude = lonNull.Float64
 		}
-
 		if destLatNull.Valid {
 			ri.DestinationLocation.Latitude = destLatNull.Float64
 		}
@@ -347,11 +343,10 @@ func (r *AdminRepo) GetActiveRides(ctx context.Context) (*models.ActiveRidesResp
 		return nil, err
 	}
 
-	resp := &models.ActiveRidesResponse{
-		Rides:      rides,
-		TotalCount: totalCount,
-		Page:       page,
-		PageSize:   pageSize,
-	}
-	return resp, nil
+	metadata := models.CalculateMetadata(totalRecords, filters.Page, filters.PageSize)
+
+	return &models.ActiveRidesResponse{
+		Rides:    rides,
+		Metadata: metadata,
+	}, nil
 }

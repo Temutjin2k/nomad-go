@@ -28,6 +28,6 @@ externalapiconfig:
   locationiqapikey: ${LOCATIONIQ_API_KEY}
 
 auth: 
-  access_token_ttl: ${AUTH_ACCESS_TOKEN_TTL:-15m}
+  access_token_ttl: ${AUTH_ACCESS_TOKEN_TTL:-1h}
   refresh_token_ttl: ${AUTH_REFRESH_TOKEN_TTL:-168h}
   jwt_secret: ${AUTH_JWT_SECRET:-supersecretkey}
