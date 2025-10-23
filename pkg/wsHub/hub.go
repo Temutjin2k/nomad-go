@@ -93,6 +93,7 @@ func (h *ConnectionHub) Delete(entityID uuid.UUID) error {
 }
 
 // SendTo отправляет сообщение определённому клиенту по ID
+// возвращает ошибку ErrConnIsNotFound, если соединение не найдена
 func (h *ConnectionHub) SendTo(id uuid.UUID, msg map[string]any) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -105,19 +106,23 @@ func (h *ConnectionHub) SendTo(id uuid.UUID, msg map[string]any) error {
 
 // Close закрывает каждое websocket соединение
 func (h *ConnectionHub) Close() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	ctx := wrap.WithAction(context.Background(), "hub_close")
 
+	// копируем клиентов под локом
+	h.mu.Lock()
+	clients := make([]*Conn, 0, len(h.clients))
 	for _, conn := range h.clients {
-		h.mu.Unlock()
-		if err := h.Delete(conn.entityID); err != nil {
-			h.l.Warn(ctx, "failed to delete connection", "error", err)
-		}
-		h.mu.Lock()
+		clients = append(clients, conn)
 	}
+	h.mu.Unlock()
+	// закрываем вне локов
+	for _, conn := range clients {
+		_ = h.Delete(conn.entityID)
+	}
+
 	h.wg.Wait()
+
+	h.l.Info(ctx, "all websocket connections closed gracefully")
 }
 
 // Clients возвращает копию списка клиентов
@@ -130,4 +135,16 @@ func (h *ConnectionHub) Clients() map[uuid.UUID]*Conn {
 		copyMap[id] = conn
 	}
 	return copyMap
+}
+
+// GetConn возвращает нужное соединение по UUID
+func (h *ConnectionHub) GetConn(id uuid.UUID) (*Conn, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	conn, ok := h.clients[id]
+	if !ok {
+		return nil, ErrConnIsNotFound
+	}
+	return conn, nil
 }
