@@ -13,19 +13,19 @@ import (
 )
 
 type RideService interface {
-    Create(ctx context.Context, ride *models.Ride) (*models.Ride, error) 
-    Cancel(ctx context.Context, rideID uuid.UUID, reason string) (*models.Ride, error)
-    Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
+	Create(ctx context.Context, ride *models.Ride) (*models.Ride, error)
+	Cancel(ctx context.Context, rideID uuid.UUID, reason string) (*models.Ride, error)
+	Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
 }
 
 type Ride struct {
-	l logger.Logger
+	l    logger.Logger
 	ride RideService
 }
 
 func NewRide(l logger.Logger, ride RideService) *Ride {
 	return &Ride{
-		l: l,
+		l:    l,
 		ride: ride,
 	}
 }
@@ -44,47 +44,48 @@ func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
 	request.Validate(v)
 
 	if !v.Valid() {
-		h.l.Warn(ctx, "invalid request data")
+		h.l.Error(ctx, "invalid request data", v)
 		failedValidationResponse(w, v.Errors)
 		return
 	}
 
-		domainModel, err := request.ToModel()
-    if err != nil {
-        errorResponse(w, http.StatusBadRequest, "invalid passenger_id format")
-        return
-    }
+	domainModel, err := request.ToModel()
+	if err != nil {
+		h.l.Error(ctx, "failed to map request", err)
+		errorResponse(w, http.StatusBadRequest, "invalid passenger_id format")
+		return
+	}
 
-    createdRide, err := h.ride.Create(ctx, domainModel)
-    if err != nil {
-        h.l.Error(wrap.ErrorCtx(ctx, err), "failed to create ride", err)
-        errorResponse(w, GetCode(err), err.Error())
-        return
-    }
+	createdRide, err := h.ride.Create(ctx, domainModel)
+	if err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to create ride", err)
+		errorResponse(w, GetCode(err), err.Error())
+		return
+	}
 
-		response := envelope{
-			"ride_id": createdRide.ID,
-			"ride_number": createdRide.RideNumber,
-			"status": createdRide.Status,
-			"estimated_fare": createdRide.EstimatedFare,
-			"estimated_duration_minutes": createdRide.EstimatedDurationMin,
-			"estimated_distance_km": createdRide.EstimatedDistanceKm,
-		}
+	response := envelope{
+		"ride_id":                    createdRide.ID,
+		"ride_number":                createdRide.RideNumber,
+		"status":                     createdRide.Status,
+		"estimated_fare":             createdRide.EstimatedFare,
+		"estimated_duration_minutes": createdRide.EstimatedDurationMin,
+		"estimated_distance_km":      createdRide.EstimatedDistanceKm,
+	}
 
-    if err := writeJSON(w, http.StatusCreated, response, nil); err != nil {
-        h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write response", err)
-        internalErrorResponse(w, err.Error())
-    }
+	if err := writeJSON(w, http.StatusCreated, response, nil); err != nil {
+		h.l.Error(ctx, "failed to write response", err)
+		internalErrorResponse(w, err.Error())
+	}
 }
 
 func (h *Ride) CancelRide(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "cancel_ride")
 
-	rideIDstr := r.PathValue("ride_id") 
+	rideIDstr := r.PathValue("ride_id")
 	rideID, err := uuid.Parse(rideIDstr)
 	if err != nil {
-			errorResponse(w, http.StatusBadRequest, "invalid ride ID format")
-			return
+		errorResponse(w, http.StatusBadRequest, "invalid ride ID format")
+		return
 	}
 
 	var request dto.CancelRideRequest
@@ -100,20 +101,20 @@ func (h *Ride) CancelRide(w http.ResponseWriter, r *http.Request) {
 
 	cancelledRide, err := h.ride.Cancel(ctx, rideID, request.Reason)
 	if err != nil {
-			h.l.Error(wrap.ErrorCtx(ctx, err), "failed to cancel ride", err)
-			errorResponse(w, GetCode(err), err.Error())
-			return
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to cancel ride", err)
+		errorResponse(w, GetCode(err), err.Error())
+		return
 	}
 
 	response := envelope{
-		"ride_id": cancelledRide.ID,
-		"status": cancelledRide.Status,
+		"ride_id":      cancelledRide.ID,
+		"status":       cancelledRide.Status,
 		"cancelled_at": cancelledRide.CancelledAt,
-		"message": cancelledRide.CancellationReason,
+		"message":      cancelledRide.CancellationReason,
 	}
 
 	if err := writeJSON(w, http.StatusAccepted, response, nil); err != nil {
-		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to write response", err)
+		h.l.Error(ctx, "failed to write response", err)
 		internalErrorResponse(w, err.Error())
 		return
 	}
