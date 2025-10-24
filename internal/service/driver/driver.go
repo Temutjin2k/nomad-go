@@ -32,6 +32,7 @@ type logic struct {
 }
 
 type infra struct {
+	sender        Sender
 	addressGetter GeoCoder
 	publisher     Publisher
 	trm           trm.TxManager
@@ -46,7 +47,7 @@ type repos struct {
 }
 
 // New returns a new instance of the driver service with all dependencies injected.
-func New(driverRepo DriverRepo, sessionRepo DriverSessionRepo, coordinateRepo CoordinateRepo, userRepo UserRepo, rideRepo RideRepo, addressGetter GeoCoder, publisher Publisher, calculate ridecalc.Calculator, trm trm.TxManager, l logger.Logger) *Service {
+func New(driverRepo DriverRepo, sessionRepo DriverSessionRepo, coordinateRepo CoordinateRepo, userRepo UserRepo, rideRepo RideRepo, addressGetter GeoCoder, publisher Publisher, calculate ridecalc.Calculator, sender Sender, trm trm.TxManager, l logger.Logger) *Service {
 	return &Service{
 		repos: repos{
 			driver:     driverRepo,
@@ -61,6 +62,7 @@ func New(driverRepo DriverRepo, sessionRepo DriverSessionRepo, coordinateRepo Co
 		infra: infra{
 			addressGetter: addressGetter,
 			publisher:     publisher,
+			sender:        sender,
 			trm:           trm,
 		},
 		l: l,
@@ -563,4 +565,8 @@ func (s *Service) UpdateLocation(ctx context.Context, driverID uuid.UUID, data U
 	}
 
 	return coordinateID, nil
+}
+
+func (s *Service) IsExist(ctx context.Context, driverID uuid.UUID) (bool, error) {
+	return s.repos.driver.IsDriverExist(ctx, driverID)
 }

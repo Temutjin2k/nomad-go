@@ -8,7 +8,9 @@ import (
 	"syscall"
 
 	"github.com/Temutjin2k/ride-hail-system/config"
+	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/server"
+	wshandler "github.com/Temutjin2k/ride-hail-system/internal/adapter/http/ws"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/locationIQ"
 	repo "github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
 	rabbitAdapter "github.com/Temutjin2k/ride-hail-system/internal/adapter/rabbit"
@@ -19,6 +21,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/pkg/postgres"
 	"github.com/Temutjin2k/ride-hail-system/pkg/rabbit"
 	"github.com/Temutjin2k/ride-hail-system/pkg/trm"
+	ws "github.com/Temutjin2k/ride-hail-system/pkg/wsHub"
 )
 
 type DriverService struct {
@@ -81,12 +84,21 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 	// Calculator service
 	calculator := ridecalc.New()
 
+	// Websocket service
+	wsHub := ws.NewConnHub(log)
+	sender := wshandler.NewDriverHub(wsHub)
+
 	// Main Service
-	driverService := drivergo.New(driverRepo, sessionRepo, coordinateRepo, userRepo, rideRepo, locationIQclient, driverProducer, calculator, trm, log)
+	driverService := drivergo.New(driverRepo, sessionRepo, coordinateRepo, userRepo, rideRepo, locationIQclient, driverProducer, calculator, sender, trm, log)
 	tokenService := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authService := auth.NewAuthService(userRepo, tokenService, log)
 
-	httpServer, err := server.New(cfg, driverService, nil, nil, authService, log)
+	options := &handler.DriverServiceOptions{
+		WsConnections: wsHub,
+		Service:       driverService,
+	}
+
+	httpServer, err := server.New(ctx, cfg, options, nil, nil, authService, log)
 	if err != nil {
 		log.Error(ctx, "Failed to setup http server", err)
 		return nil, err

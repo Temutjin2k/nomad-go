@@ -1,4 +1,4 @@
-package handler
+package wshandler
 
 import (
 	"context"
@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/ws/dto"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
+	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
 	ws "github.com/Temutjin2k/ride-hail-system/pkg/wsHub"
 )
 
@@ -35,11 +37,6 @@ func (h *DriverHub) SendRideOffer(ctx context.Context, driverID uuid.UUID, offer
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
-	// Отправляем через WebSocket
-	if err := h.connections.SendTo(driverID, msg); err != nil {
-		return false, fmt.Errorf("%s: %w", op, err)
-	}
-
 	conn, err := h.connections.GetConn(driverID)
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)
@@ -49,18 +46,39 @@ func (h *DriverHub) SendRideOffer(ctx context.Context, driverID uuid.UUID, offer
 	conn.Subscribe(offer.ID.String(), ch)
 	defer conn.Unsubscribe(offer.ID.String())
 
+	if err := conn.Send(msg); err != nil {
+		return false, fmt.Errorf("%s: %w", op, err)
+	}
+
 	// Timeout: 30 seconds for driver responses
-	timer := time.NewTicker(time.Second * 30)
+	timer := time.NewTimer(30 * time.Second)
 	defer timer.Stop()
 
+	var resp dto.OfferResp
 	select {
 	case <-ctx.Done():
 		return false, fmt.Errorf("%s: %s", op, "ctx (Done)")
 	case <-timer.C:
 		return false, fmt.Errorf("%s: %w", op, ws.ErrListenTimeout)
-	case <-ch:
+	case data := <-ch:
+		b, err := json.Marshal(data)
+		if err != nil {
+			errorResponse(conn, err.Error())
+			return false, fmt.Errorf("%s: marshal response: %w", op, err)
+		}
+		if err := json.Unmarshal(b, &resp); err != nil {
+			errorResponse(conn, err.Error())
+			return false, fmt.Errorf("%s: unmarshal response: %w", op, err)
+		}
 
+		v := validator.New()
+		resp.Validate(v)
+		if !v.Valid() {
+			if err := failedValidationResponse(conn, v.Errors); err != nil {
+				return false, fmt.Errorf("failed send validation response: %w", err)
+			}
+		}
 	}
 
-	return true, nil
+	return resp.Accepted, nil
 }

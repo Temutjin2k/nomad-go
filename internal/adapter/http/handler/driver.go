@@ -13,15 +13,25 @@ import (
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
+	wsh "github.com/Temutjin2k/ride-hail-system/pkg/wsHub"
+	"github.com/gorilla/websocket"
 )
 
 type Driver struct {
-	service DriverService
-	l       logger.Logger
+	service       DriverService
+	wsConnections *wsh.ConnectionHub
+	ctx           context.Context
+	l             logger.Logger
+}
+
+type DriverServiceOptions struct {
+	WsConnections *wsh.ConnectionHub
+	Service       DriverService
 }
 
 type DriverService interface {
 	Register(ctx context.Context, newDriver *models.Driver) error
+	IsExist(ctx context.Context, driverID uuid.UUID) (bool, error)
 	GoOnline(ctx context.Context, driverID uuid.UUID, location models.Location) (sessionID uuid.UUID, err error)
 	GoOffline(ctx context.Context, driverID uuid.UUID) (models.SessionSummary, error)
 	StartRide(ctx context.Context, startTime time.Time, driverID, rideID uuid.UUID, location models.Location) error
@@ -29,10 +39,20 @@ type DriverService interface {
 	UpdateLocation(ctx context.Context, driverID uuid.UUID, data drivergo.UpdateLocationData) (coordinateID uuid.UUID, err error)
 }
 
-func NewDriver(service DriverService, l logger.Logger) *Driver {
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Разрешаем для тестов
+	},
+}
+
+func NewDriver(ctx context.Context, l logger.Logger, option *DriverServiceOptions) *Driver {
 	return &Driver{
-		service: service,
-		l:       l,
+		service:       option.Service,
+		wsConnections: option.WsConnections,
+		l:             l,
+		ctx:           ctx,
 	}
 }
 func (h *Driver) Register(w http.ResponseWriter, r *http.Request) {
@@ -329,4 +349,71 @@ func (h *Driver) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.l.Info(ctx, "driver location has been updated", "driver_id", driverID, "coordinate_id", coordinateID)
+}
+
+func (h *Driver) HandleWS(w http.ResponseWriter, r *http.Request) {
+	ctx := wrap.WithAction(r.Context(), "handle_driver_ws")
+
+	driverID, err := uuid.Parse(r.PathValue("driver_id"))
+	if err != nil {
+		h.l.Warn(ctx, "invalid driver UUID format", "driver_id_raw", r.PathValue("driver_id"), "error", err)
+		errorResponse(w, http.StatusBadRequest, "invalid driver uuid format")
+		return
+	}
+
+	exist, err := h.service.IsExist(ctx, driverID)
+	if err != nil {
+		h.l.Error(ctx, "failed to check driver existense", err, "driver_id", driverID)
+		badRequestResponse(w, err.Error())
+		return
+	}
+
+	if !exist {
+		h.l.Debug(ctx, "driver is not exist", "driver_id", driverID)
+		badRequestResponse(w, types.ErrUserNotFound.Error())
+		return
+	}
+
+	h.l.Info(ctx, "incoming WS connection", "driver_id", driverID, "remote_addr", r.RemoteAddr)
+
+	wsConn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		h.l.Error(ctx, "failed to upgrade to websocket", err, "driver_id", driverID)
+		errorResponse(w, http.StatusBadRequest, "upgrade failed")
+		return
+	}
+
+	conn := wsh.NewConn(h.ctx, driverID, wsConn, h.l)
+	if err := h.wsConnections.Add(conn); err != nil {
+		h.l.Error(ctx, "failed to register WS connection", err, "driver_id", driverID)
+		wsConn.WriteJSON(map[string]any{"error": "failed to register"})
+		wsConn.Close()
+		return
+	}
+
+	h.l.Info(ctx, "websocket connection registered", "driver_id", driverID)
+
+	// Heartbeat
+	go func() {
+		defer func() {
+			h.l.Info(ctx, "heartbeat loop stopped", "driver_id", driverID)
+			h.wsConnections.Delete(driverID)
+		}()
+
+		if err := conn.HeartbeatLoop(time.Second*30, time.Second*60); err != nil {
+			h.l.Error(ctx, "heartbeat loop failed", err, "driver_id", driverID)
+		}
+	}()
+
+	// Listen for messages
+	go func() {
+		defer func() {
+			h.l.Info(ctx, "listen loop stopped", "driver_id", driverID)
+			h.wsConnections.Delete(driverID)
+		}()
+
+		if err := conn.Listen(); err != nil {
+			h.l.Error(ctx, "websocket listen failed", err, "driver_id", driverID)
+		}
+	}()
 }

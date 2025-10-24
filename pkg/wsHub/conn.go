@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"maps"
 	"context"
 	"errors"
 	"fmt"
@@ -146,9 +147,7 @@ mainLoop:
 			c.mu.Lock()
 			c.lastPong = time.Now()
 			subs := make(map[string]chan map[string]any, len(c.subscribers))
-			for k, v := range c.subscribers {
-				subs[k] = v
-			}
+			maps.Copy(subs, c.subscribers)
 			c.mu.Unlock()
 
 			c.l.Debug(c.ctx, "received message", "entity_ID", c.entityID, "msg", msg)

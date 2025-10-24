@@ -44,7 +44,7 @@ func NewAdmin(ctx context.Context, cfg config.Config, log logger.Logger) (*Admin
 	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, txManager, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authSvc := auth.NewAuthService(userRepo, tokenSvc, log)
 
-	server, err := httpserver.New(cfg, nil, nil, adminSvc, authSvc, log)
+	server, err := httpserver.New(ctx, cfg, nil, nil, adminSvc, authSvc, log)
 	if err != nil {
 		return nil, err
 	}

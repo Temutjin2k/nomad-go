@@ -13,70 +13,66 @@ import (
 )
 
 type DriverProducer struct {
-	client *rabbit.RabbitMQ
+	client   *rabbit.RabbitMQ
+	exchange string
 }
 
 func NewDriverProducer(client *rabbit.RabbitMQ) *DriverProducer {
 	return &DriverProducer{
-		client: client,
+		client:   client,
+		exchange: "driver_topic",
 	}
 }
 
-// PublishDriverStatus — публикует сообщение о статусе водителя
-func (r *DriverProducer) PublishDriverStatus(ctx context.Context, msg models.DriverStatusUpdateMessage) error {
-	const op = "DriverProducer.PublishDriverStatus"
+// initExchange — гарантирует наличие exchange
+func (r *DriverProducer) initExchange(_ context.Context) error {
+	return r.client.Channel.ExchangeDeclare(
+		r.exchange,
+		"topic",
+		true,  // durable
+		false, // autoDelete
+		false, // internal
+		false, // noWait
+		nil,   // args
+	)
+}
+
+func (r *DriverProducer) publish(ctx context.Context, routingKey string, msg any) error {
+	const op = "DriverProducer.publish"
 
 	body, err := json.Marshal(msg)
 	if err != nil {
-		ctx = wrap.WithAction(ctx, "marshal_driver")
-		return wrap.Error(ctx, fmt.Errorf("%s: failed to marshal message: %w", op, err))
+		return wrap.Error(ctx, fmt.Errorf("%s: marshal: %w", op, err))
 	}
 
-	key := fmt.Sprintf("driver.status.%s", msg.DriverID)
-
-	if err := r.client.Channel.PublishWithContext(
-		ctx,
-		"driver_topic", // exchange
-		key,            // routing key
-		false,          // mandatory
-		false,          // immediate
-		amqp091.Publishing{
-			ContentType: "application/json",
-			Body:        body,
-			Timestamp:   time.Now(),
-		},
-	); err != nil {
-		ctx = wrap.WithAction(ctx, "publish_message")
-		return wrap.Error(ctx, fmt.Errorf("%s: failed to publish with context: %w", op, err))
+	// гарантируем, что exchange существует
+	if err := r.initExchange(ctx); err != nil {
+		return wrap.Error(ctx, fmt.Errorf("%s: declare exchange: %w", op, err))
 	}
 
+	pub := amqp091.Publishing{
+		ContentType: "application/json",
+		Body:        body,
+		Timestamp:   time.Now(),
+	}
+
+	if err := r.client.Channel.PublishWithContext(ctx, r.exchange, routingKey, false, false, pub); err != nil {
+		return wrap.Error(ctx, fmt.Errorf("%s: publish: %w", op, err))
+	}
 	return nil
+}
+
+func (r *DriverProducer) PublishDriverStatus(ctx context.Context, msg models.DriverStatusUpdateMessage) error {
+	key := fmt.Sprintf("driver.status.%s", msg.DriverID)
+	return r.publish(ctx, key, msg)
 }
 
 func (r *DriverProducer) PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error {
-	const op = "DriverProducer.PublishRideStatus"
-
-	body, err := json.Marshal(msg)
-	if err != nil {
-		ctx = wrap.WithAction(ctx, "marshal_ride")
-		return wrap.Error(ctx, fmt.Errorf("%s: failed to marshal message: %w", op, err))
-	}
 	key := fmt.Sprintf("ride.status.%s", msg.RideID)
+	return r.publish(ctx, key, msg)
+}
 
-	if err := r.client.Channel.PublishWithContext(
-		ctx,
-		"driver_topic", // exchange
-		key,            // routing key
-		false,          // mandatory
-		false,          // immediate
-		amqp091.Publishing{
-			ContentType: "application/json",
-			Body:        body,
-			Timestamp:   time.Now(),
-		},
-	); err != nil {
-		ctx = wrap.WithAction(ctx, "publish_message")
-		return wrap.Error(ctx, fmt.Errorf("%s: failed to publish with context: %w", op, err))
-	}
-	return nil
+func (r *DriverProducer) PublishDriverResponse(ctx context.Context, msg models.DriverMatchResponse) error {
+	key := fmt.Sprintf("driver.response.%s", msg.RideID)
+	return r.publish(ctx, key, msg)
 }

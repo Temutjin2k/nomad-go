@@ -21,6 +21,16 @@ type Driver struct {
 	IsVerified    bool               // Indicates if the driver's documents have been verified
 }
 
+// DriverWithDistance представляет водителя с координатами и расстоянием до точки
+type DriverWithDistance struct {
+	ID         uuid.UUID       `json:"id"`
+	Name       string          `json:"name"`
+	Rating     float64         `json:"rating"`
+	Location   LocationMessage `json:"location"`
+	Vehicle    Vehicle         `json:"vehicle"`
+	DistanceKm float64         `json:"distance_km"`
+}
+
 type Vehicle struct {
 	Type  types.VehicleClass
 	Make  string `json:"make"`
@@ -36,4 +46,20 @@ type DriverStatusUpdateMessage struct {
 	Status    types.DriverStatus `json:"status"`
 	RideID    uuid.UUID          `json:"ride_id,omitempty"`
 	Timestamp time.Time          `json:"timestamp"`
+}
+
+type DriverInfo struct {
+	Name    string  `json:"name"`
+	Rating  float64 `json:"rating"`
+	Vehicle Vehicle `json:"vehicle"`
+}
+
+type DriverMatchResponse struct {
+	RideID                  uuid.UUID       `json:"ride_id"`
+	DriverID                uuid.UUID       `json:"driver_id"`
+	Accepted                bool            `json:"accepted"`
+	EstimatedArrivalMinutes int             `json:"estimated_arrival_minutes"`
+	DriverLocation          LocationMessage `json:"driver_location"`
+	DriverInfo              DriverInfo      `json:"driver_info"`
+	CorrelationID           string          `json:"correlation_id"`
 }

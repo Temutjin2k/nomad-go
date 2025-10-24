@@ -119,6 +119,7 @@ type RideOffer struct {
 
 type RideOfferResponse struct {
 	ID              uuid.UUID       `json:"offer_id"`
+	MsgType         string          `json:"type"` // By default must be: "ride_offer"
 	RideID          uuid.UUID       `json:"ride_id"`
 	Accepted        bool            `json:"accepted"`
 	CurrentLocation LocationMessage `json:"current_location"`

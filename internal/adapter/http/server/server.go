@@ -37,8 +37,9 @@ type handlers struct {
 }
 
 func New(
+	ctx context.Context,
 	cfg config.Config,
-	driverService handler.DriverService,
+	driverService *handler.DriverServiceOptions,
 	rideService handler.RideService,
 	adminService handler.AdminService,
 	authService handler.AuthService,
@@ -57,7 +58,7 @@ func New(
 		handlers.ride = handler.NewRide(logger, rideService)
 	case types.DriverAndLocationService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.DriverLocationService)
-		handlers.driver = handler.NewDriver(driverService, logger)
+		handlers.driver = handler.NewDriver(ctx, logger, driverService)
 	case types.AdminService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.AdminService)
 		handlers.admin = handler.NewAdmin(adminService, logger)

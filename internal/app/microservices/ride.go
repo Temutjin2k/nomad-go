@@ -48,7 +48,7 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authSvc := auth.NewAuthService(userRepo, tokenSvc, log)
 
-	httpServer, err := httpserver.New(cfg, nil, nil, nil, authSvc, log)
+	httpServer, err := httpserver.New(ctx, cfg, nil, nil, nil, authSvc, log)
 	if err != nil {
 		log.Error(ctx, "Failed to setup http server", err)
 		return nil, err
