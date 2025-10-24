@@ -50,7 +50,6 @@ func (m *Manager) Do(ctx context.Context, fn func(ctx context.Context) error) (e
 				// log the error from rollback
 				fmt.Printf("failed to rollback tx after panic: %v\n", rbErr)
 			}
-			panic(p) // re-throw panic after rollback
 		} else if err != nil {
 			// if an error occurred, rollback
 			if rbErr := tx.Rollback(ctx); rbErr != nil {
