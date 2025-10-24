@@ -36,9 +36,9 @@ type RideEvent struct {
 /* ======================= service ======================= */
 
 type Location struct {
-	Latitude  float64
-	Longitude float64
-	Address   string
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Address   string  `json:"address,omitempty"`
 }
 
 type Ride struct {
