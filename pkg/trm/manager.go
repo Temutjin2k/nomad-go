@@ -32,100 +32,93 @@ var TxKey = ctxKeyTx{}
 var txOptions = ctxTxOptions{}
 
 // Do executes the provided function within a transaction context.
-// It starts a new transaction if one does not already exist in the context.
-// If the function returns an error, the transaction is rolled back.
-// If the function completes successfully, the transaction is committed.
+// It supports nesting via savepoints. Panics rollback and are re-panicked.
 func (m *Manager) Do(ctx context.Context, fn func(ctx context.Context) error) (err error) {
 	var tx pgx.Tx
 	tx, ctx, err = m.getTransactionFromContext(ctx)
 	if err != nil {
-		return err // return error if starting or retrieving transaction fails
+		return err
 	}
 
-	// use defer to handle commit/rollback logic
+	// Handle commit/rollback (and panic) once fn returns/exits.
 	defer func() {
 		if p := recover(); p != nil {
-			// if a panic occurred, rollback
+			// Panic path: best-effort rollback, then re-panic to preserve the stack.
 			if rbErr := tx.Rollback(ctx); rbErr != nil {
-				// log the error from rollback
-				fmt.Printf("failed to rollback tx after panic: %v\n", rbErr)
+				err = fmt.Errorf("failed to rollback tx after panic: %v", rbErr)
 			}
-		} else if err != nil {
-			// if an error occurred, rollback
+			panic(p)
+		}
+
+		if err != nil {
+			// Error path: rollback and prefer original error while surfacing rollback failures.
 			if rbErr := tx.Rollback(ctx); rbErr != nil {
-				// log the error from rollback
-				err = fmt.Errorf("failed to rollback tx: %v (original error: %w)", rbErr, err)
+				err = fmt.Errorf("rollback failed: %v (original error: %w)", rbErr, err)
 			}
-			// 'err' already contains an error from fn
-		} else {
-			// if no error and no panic, commit
-			if commitErr := tx.Commit(ctx); commitErr != nil {
-				err = fmt.Errorf("failed to commit tx: %w", commitErr)
-			}
+			return
+		}
+
+		// Success path: commit/release savepoint.
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			err = fmt.Errorf("failed to commit tx: %w", commitErr)
 		}
 	}()
 
-	// execute the provided function within the transaction context
+	// Execute user code within the transaction context (tx already injected into ctx).
 	err = fn(ctx)
-
 	return err
 }
 
-// getTransactionFromContext tries to retrieve an existing transaction from the context.
-// If a transaction exists, it creates a SAVEPOINT (nested transaction).
-// If no transaction exists, it starts a NEW transaction and adds it to the context.
+// getTransactionFromContext returns the "current layer" tx and an updated ctx:
+// - If a tx exists, it opens a SAVEPOINT (nested tx), stores that in ctx, and returns it.
+// - If no tx exists, it begins a new tx (honoring any options in ctx), stores it in ctx, and returns it.
 func (m *Manager) getTransactionFromContext(ctx context.Context) (pgx.Tx, context.Context, error) {
-    // 1. Check if a transaction already exists in the context
-	if tx, ok := ctx.Value(TxKey).(pgx.Tx); ok {
-        // 2. Yes! This means it's a nested call.
-        // Create a Savepoint
-		savepoint, err := tx.Begin(ctx)
+	// Nested transaction: create a savepoint under the current layer.
+	if current, ok := ctx.Value(TxKey).(pgx.Tx); ok && current != nil {
+		savepoint, err := current.Begin(ctx)
 		if err != nil {
 			return nil, ctx, fmt.Errorf("failed to create savepoint: %w", err)
 		}
-
-        // Return the savepoint (which is also pgx.Tx) and the ORIGINAL ctx.
+		// IMPORTANT: set the savepoint as the current layer so deeper nesting nests under it.
+		ctx = context.WithValue(ctx, TxKey, savepoint)
 		return savepoint, ctx, nil
 	}
 
-    // 3. No! This means it's a top-level call.
-    // Create a NEW transaction, CHECKING OPTIONS.
-
+	// Top-level transaction: honor options if present.
 	if opt, ok := ctx.Value(txOptions).(pgx.TxOptions); ok {
 		tx, err := m.db.BeginTx(ctx, opt)
 		if err != nil {
 			return nil, ctx, fmt.Errorf("failed to start new transaction with options: %w", err)
 		}
-        // Key point: put the NEW transaction in ctx
 		ctx = context.WithValue(ctx, TxKey, tx)
 		return tx, ctx, nil
 	}
 
-    // No options, just start a transaction
+	// No options: start a default transaction.
 	tx, err := m.db.Begin(ctx)
 	if err != nil {
 		return nil, ctx, fmt.Errorf("failed to start new transaction: %w", err)
 	}
-
-	// Key point: put the NEW transaction in ctx
 	ctx = context.WithValue(ctx, TxKey, tx)
-
-	// Return the new transaction and the UPDATED ctx
 	return tx, ctx, nil
 }
 
 // DoReadOnly executes the provided function within a read-only transaction context.
+// It merges read-only with any existing pgx.TxOptions in the context (keeps isolation, deferrable, etc.).
 func (m *Manager) DoReadOnly(ctx context.Context, fn func(ctx context.Context) error) error {
-	opts := pgx.TxOptions{
-		AccessMode: pgx.ReadOnly,
+	// Merge with any existing options instead of overwriting.
+	if existing, ok := ctx.Value(txOptions).(pgx.TxOptions); ok {
+		existing.AccessMode = pgx.ReadOnly
+		ctx = WithOptionsCtx(ctx, existing)
+	} else {
+		ctx = WithOptionsCtx(ctx, pgx.TxOptions{
+			AccessMode: pgx.ReadOnly,
+		})
 	}
-    
-	ctx = WithOptionsCtx(ctx, opts)
-
-    // use panic-safe version of Do
 	return m.Do(ctx, fn)
 }
 
+// WithOptionsCtx stores tx options in the context (used by Do / DoReadOnly).
 func WithOptionsCtx(ctx context.Context, opt pgx.TxOptions) context.Context {
 	return context.WithValue(ctx, txOptions, opt)
 }
