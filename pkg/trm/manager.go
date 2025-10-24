@@ -32,7 +32,9 @@ var TxKey = ctxKeyTx{}
 var txOptions = ctxTxOptions{}
 
 // Do executes the provided function within a transaction context.
-// It supports nesting via savepoints. Panics rollback and are re-panicked.
+// It starts a new transaction if one does not already exist in the context.
+// If the function returns an error, the transaction is rolled back.
+// If the function completes successfully, the transaction is committed.
 func (m *Manager) Do(ctx context.Context, fn func(ctx context.Context) error) (err error) {
 	var tx pgx.Tx
 	tx, ctx, err = m.getTransactionFromContext(ctx)
