@@ -1,5 +1,7 @@
 begin;
 
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 -- User roles enumeration
 create table "roles"("value" text not null primary key);
 insert into
