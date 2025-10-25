@@ -51,3 +51,13 @@ func ValidateLogin(v *validator.Validator, user *LoginRequest) {
 func ValidateRefreshToken(v *validator.Validator, req *RefreshTokenRequest) {
 	v.Check(req.RefreshToken != "", "refresh_token", "must be provided")
 }
+
+type AuthWebSocketReq struct {
+	Type  string `json:"type"`
+	Token string `json:"token"`
+}
+
+type AuthWebSocketResp struct {
+	Type        string `json:"type"`
+	PassengerID string `json:"passenger_id"`
+}

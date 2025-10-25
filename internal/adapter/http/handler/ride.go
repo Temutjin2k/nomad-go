@@ -2,7 +2,10 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler/dto"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
@@ -10,23 +13,35 @@ import (
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
+	wshub "github.com/Temutjin2k/ride-hail-system/pkg/wsHub"
+	"github.com/gorilla/websocket"
 )
 
 type RideService interface {
 	Create(ctx context.Context, ride *models.Ride) (*models.Ride, error)
 	Cancel(ctx context.Context, rideID uuid.UUID, reason string) (*models.Ride, error)
-	Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
 }
 
+type TokenValidator interface {
+	RoleCheck(ctx context.Context, token string) (*models.User, error)
+}
+
+type ConnectionHub interface {
+	Add(newConn *wshub.Conn) error
+	Delete(entityID uuid.UUID) error
+}
 type Ride struct {
-	l    logger.Logger
-	ride RideService
+	l             logger.Logger
+	ride          RideService
+	auth          TokenValidator
+	wsConnections ConnectionHub
 }
 
-func NewRide(l logger.Logger, ride RideService) *Ride {
+func NewRide(l logger.Logger, ride RideService, auth TokenValidator) *Ride {
 	return &Ride{
 		l:    l,
 		ride: ride,
+		auth: auth,
 	}
 }
 
@@ -118,4 +133,187 @@ func (h *Ride) CancelRide(w http.ResponseWriter, r *http.Request) {
 		internalErrorResponse(w, err.Error())
 		return
 	}
+}
+
+func (h *Ride) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	passengerIdStr := r.PathValue("passenger_id")
+
+	ctx := wrap.WithAction(wrap.WithPassengerID(r.Context(), passengerIdStr), "ws_handle_ride")
+
+	passengerID, err := uuid.Parse(passengerIdStr)
+	if err != nil {
+		h.l.Error(ctx, "invalid passenger id", err)
+		errorResponse(w, http.StatusBadRequest, "invalid passenger ID format")
+		return
+	}
+
+	wsConn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		h.l.Error(ctx, "failed to upgrade to websocket", err)
+		errorResponse(w, http.StatusBadRequest, "upgrade failed")
+		return
+	}
+
+	// Authenticate the WebSocket connection
+	passenger, err := h.wsAuthenticate(ctx, wsConn, passengerID)
+	if err != nil {
+		h.l.Error(ctx, "websocket authentication failed", err)
+		return
+	}
+
+	conn := wshub.NewConn(ctx, passenger.ID, wsConn, h.l)
+	if err := h.wsConnections.Add(conn); err != nil {
+		h.l.Error(ctx, "failed to register WS connection", err)
+		wsConn.WriteJSON(map[string]any{"error": "failed to register"})
+		wsConn.Close()
+		return
+	}
+
+	h.l.Info(ctx, "websocket connection registered")
+
+	// Heartbeat
+	go func() {
+		defer func() {
+			h.l.Info(ctx, "heartbeat loop stopped")
+			h.wsConnections.Delete(passenger.ID)
+		}()
+
+		if err := conn.HeartbeatLoop(time.Second*30, time.Second*60); err != nil {
+			h.l.Error(ctx, "heartbeat loop failed", err)
+		}
+	}()
+
+	// Listen for messages
+	go func() {
+		defer func() {
+			h.l.Info(ctx, "listen loop stopped")
+			h.wsConnections.Delete(passenger.ID)
+		}()
+
+		if err := conn.Listen(); err != nil {
+			h.l.Error(ctx, "websocket listen failed", err)
+		}
+	}()
+
+}
+
+// wsAuthenticate enforces a 5s auth window, expects a JSON text message:
+//
+//	{"type":"auth","token":"Bearer <jwt>"}
+//
+// It validates the JWT via RideService and returns the passenger UUID.
+// On any error, it sends an appropriate WebSocket close frame and closes the connection.
+func (h *Ride) wsAuthenticate(ctx context.Context, conn *websocket.Conn, passengerID uuid.UUID) (*models.User, error) {
+	const authTimeout = 5 * time.Second
+
+	// Enforce "client must authenticate within 5 seconds".
+	if err := conn.SetReadDeadline(time.Now().Add(authTimeout)); err != nil {
+		h.l.Error(ctx, "failed to set read deadline", err)
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "internal error"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return nil, err
+	}
+
+	msgType, payload, err := conn.ReadMessage()
+	if err != nil {
+		h.l.Error(ctx, "failed to read initial auth message", err)
+		closeCode := websocket.ClosePolicyViolation
+		closeReason := "must send auth message within 5 seconds"
+		// If it was a timeout, clarify reason.
+		if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
+			closeReason = "authentication timeout (5s)"
+		}
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(closeCode, closeReason),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return nil, err
+	}
+
+	if msgType != websocket.TextMessage {
+		h.l.Error(ctx, "first message must be text", errors.New("non-text first frame"))
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseUnsupportedData, "first message must be JSON text"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return nil, errors.New("first message must be text")
+	}
+
+	var req dto.AuthWebSocketReq
+	if err := json.Unmarshal(payload, &req); err != nil {
+		h.l.Error(ctx, "invalid auth JSON", err)
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid auth JSON"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return nil, err
+	}
+
+	if req.Type != "auth" {
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "first message must be type=auth"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return nil, errors.New("unexpected message type")
+	}
+
+	// Validate the token and get the passenger info
+	passenger, err := h.auth.RoleCheck(ctx, req.Token)
+	if err != nil {
+		return nil, err
+	}
+
+	if passenger.ID != passengerID {
+		h.l.Error(ctx, "passenger ID mismatch", errors.New("passenger ID does not match token"))
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "passenger ID does not match token"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return nil, errors.New("passenger ID mismatch")
+	}
+
+	// Auth succeeded; clear the read deadline for normal operation.
+	if err := conn.SetReadDeadline(time.Time{}); err != nil {
+		h.l.Error(ctx, "failed to clear read deadline", err)
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "internal error"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return nil, err
+	}
+
+	// Send an explicit acknowledgment so the client can transition its state machine.
+	ack := dto.AuthWebSocketResp{
+		Type:        "auth_ok",
+		PassengerID: passenger.ID.String(),
+	}
+	if err := conn.WriteJSON(ack); err != nil {
+		h.l.Error(ctx, "failed to send auth_ok", err)
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseAbnormalClosure, "failed to ack authentication"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return nil, err
+	}
+
+	h.l.Info(ctx, "websocket authentication succeeded")
+	return passenger, nil
 }

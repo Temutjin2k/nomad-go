@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"errors"
+	"maps"
 	"sync"
 
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
@@ -131,9 +132,7 @@ func (h *ConnectionHub) Clients() map[uuid.UUID]*Conn {
 	defer h.mu.Unlock()
 
 	copyMap := make(map[uuid.UUID]*Conn, len(h.clients))
-	for id, conn := range h.clients {
-		copyMap[id] = conn
-	}
+	maps.Copy(copyMap, h.clients)
 	return copyMap
 }
 

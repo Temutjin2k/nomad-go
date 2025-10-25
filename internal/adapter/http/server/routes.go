@@ -32,9 +32,9 @@ func (a *API) setupAdminRoutes() {
 
 // setupRideRoutes setups routes for ride service
 func (a *API) setupRideRoutes() {
-	a.mux.HandleFunc("POST /rides", nil)                       // Create a new ride request
-	a.mux.HandleFunc("POST /rides/{ride_id}/cancel", nil)      // Cancel a ride
-	a.mux.HandleFunc("GET /ws/passengers/{passenger_id}", nil) // WebSocket connection for passengers
+	a.mux.HandleFunc("POST /rides", a.routes.ride.CreateRide)                  // Create a new ride request
+	a.mux.HandleFunc("POST /rides/{ride_id}/cancel", a.routes.ride.CancelRide) // Cancel a ride
+	a.mux.HandleFunc("GET /ws/passengers/{passenger_id}", nil)                 // WebSocket connection for passengers
 }
 
 // setupDriverAndLocationRoutes setups routes for driver and location service

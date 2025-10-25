@@ -55,7 +55,7 @@ func New(
 	switch cfg.Mode {
 	case types.RideService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.RideService)
-		handlers.ride = handler.NewRide(logger, rideService)
+		handlers.ride = handler.NewRide(logger, rideService, authService)
 	case types.DriverAndLocationService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.DriverLocationService)
 		handlers.driver = handler.NewDriver(ctx, logger, driverService)

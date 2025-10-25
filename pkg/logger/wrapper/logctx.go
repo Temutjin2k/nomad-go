@@ -7,10 +7,11 @@ import (
 type (
 	// LogCtx holds contextual information for logging
 	LogCtx struct {
-		Action    string
-		UserID    string
-		RequestID string
-		RideID    string
+		Action      string
+		UserID      string
+		RequestID   string
+		RideID      string
+		PassengerID string
 	}
 
 	// logCtxKeyStruct is an unexported type for context keys defined in this package.
@@ -75,4 +76,12 @@ func WithAction(ctx context.Context, action string) context.Context {
 		return context.WithValue(ctx, LogCtxKey, lc)
 	}
 	return context.WithValue(ctx, LogCtxKey, LogCtx{Action: action})
+}
+
+func WithPassengerID(ctx context.Context, passengerID string) context.Context {
+	if lc, ok := ctx.Value(LogCtxKey).(LogCtx); ok {
+		lc.PassengerID = passengerID
+		return context.WithValue(ctx, LogCtxKey, lc)
+	}
+	return context.WithValue(ctx, LogCtxKey, LogCtx{PassengerID: passengerID})
 }

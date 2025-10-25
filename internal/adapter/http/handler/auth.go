@@ -137,7 +137,7 @@ func (h *Auth) Profile(w http.ResponseWriter, r *http.Request) {
 	user := models.UserFromContext(ctx)
 	if user == nil {
 		h.l.Warn(ctx, "failed to get profile")
-		errorResponse(w, http.StatusNotFound, "")
+		errorResponse(w, http.StatusNotFound, "failed to get profile")
 		return
 	}
 

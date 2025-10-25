@@ -2,6 +2,7 @@ package microservices
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -9,56 +10,65 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/config"
 	httpserver "github.com/Temutjin2k/ride-hail-system/internal/adapter/http/server"
 	repo "github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
+	"github.com/Temutjin2k/ride-hail-system/internal/adapter/rabbit"
 	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
 	ridecalc "github.com/Temutjin2k/ride-hail-system/internal/service/calculator"
 	ridego "github.com/Temutjin2k/ride-hail-system/internal/service/ride"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	postgres "github.com/Temutjin2k/ride-hail-system/pkg/postgres"
+	rabbitmq "github.com/Temutjin2k/ride-hail-system/pkg/rabbit"
 	"github.com/Temutjin2k/ride-hail-system/pkg/trm"
 )
 
 type RideService struct {
 	postgresDB *postgres.PostgreDB
 	httpServer *httpserver.API
-	cfg        config.Config
-	log        logger.Logger
-	trm        trm.TxManager
-	publisher  ridego.RideMsgBroker
+	rabbitMQ   *rabbitmq.RabbitMQ
+
+	cfg config.Config
+	log logger.Logger
 }
 
+// NewRide creates ride microservice
 func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideService, error) {
+	// init Postgres
 	postgresDB, err := postgres.New(ctx, cfg.Database)
 	if err != nil {
-		log.Error(ctx, "Failed to setup database", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to setup database: %w", err)
 	}
 
-	trm := trm.New(postgresDB.Pool)
+	// init RabbitMQ
+	rabbitClient, err := rabbitmq.New(ctx, cfg.RabbitMQ.GetDSN(), log)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup rabbitmq: %w", err)
+	}
+	rabbitRideBroker := rabbit.NewRideMsgBroker(rabbitClient)
+
+	// init repositories
 	rideRepo := repo.NewRideRepo(postgresDB.Pool)
 	userRepo := repo.NewUserRepo(postgresDB.Pool)
 	refreshTokenRepo := repo.NewRefreshTokenRepo(postgresDB.Pool)
 
-	// Calculator service
+	// init services
+	trm := trm.New(postgresDB.Pool)
 	calculator := ridecalc.New()
-
-	// TODO: fix all of them
-	rideService := ridego.NewRideService(rideRepo, calculator, log, trm, nil)
-	_ = rideService
-
+	rideService := ridego.NewRideService(rideRepo, calculator, log, trm, rabbitRideBroker)
 	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authSvc := auth.NewAuthService(userRepo, tokenSvc, log)
 
-	httpServer, err := httpserver.New(ctx, cfg, nil, nil, nil, authSvc, log)
+	// init http server
+	httpServer, err := httpserver.New(ctx, cfg, nil, rideService, nil, authSvc, log)
 	if err != nil {
-		log.Error(ctx, "Failed to setup http server", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to setup http server: %w", err)
 	}
 
 	return &RideService{
 		httpServer: httpServer,
 		postgresDB: postgresDB,
-		cfg:        cfg,
-		log:        log,
+		rabbitMQ:   rabbitClient,
+
+		cfg: cfg,
+		log: log,
 	}, nil
 }
 
@@ -93,5 +103,11 @@ func (s *RideService) close(ctx context.Context) {
 
 	if s.postgresDB != nil && s.postgresDB.Pool != nil {
 		s.postgresDB.Pool.Close()
+	}
+
+	if s.rabbitMQ != nil {
+		if err := s.rabbitMQ.Close(ctx); err != nil {
+			s.log.Warn(ctx, "failed to close rabbitmq connection", "error", err.Error())
+		}
 	}
 }
