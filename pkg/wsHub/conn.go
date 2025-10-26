@@ -1,11 +1,11 @@
 package ws
 
 import (
-	"maps"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"sync"
 	"time"
@@ -50,8 +50,6 @@ func NewConn(parent context.Context, entityID uuid.UUID, conn *websocket.Conn, l
 		c.lastPong = time.Now()
 		c.mu.Unlock()
 
-		c.l.Debug(c.ctx, "pong received", "entity_ID", c.entityID)
-
 		return nil
 	})
 
@@ -86,6 +84,12 @@ func (c *Conn) HeartbeatLoop(timeout, interval time.Duration) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// Пингнем сразу при старте
+	if err := c.sendPing(); err != nil {
+		c.l.Error(c.ctx, "failed to send initial ping", err, "entity_ID", c.entityID)
+		return c.Close()
+	}
+
 mainLoop:
 	for {
 		select {
@@ -102,19 +106,26 @@ mainLoop:
 				break mainLoop
 			}
 
-			c.mu.Lock()
-			err := c.conn.WriteMessage(websocket.PingMessage, nil)
-			c.mu.Unlock()
-
-			if err != nil {
+			// Отправляем следующий ping и уходим на новый цикл ожидания
+			if err := c.sendPing(); err != nil {
 				c.l.Error(c.ctx, "failed to send ping", err, "entity_ID", c.entityID)
-				break mainLoop
+				return c.Close()
 			}
-
-			c.l.Debug(c.ctx, "ping sent", "entity_ID", c.entityID)
 		}
 	}
 	return c.Close()
+}
+
+func (c *Conn) sendPing() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	deadline := time.Now().Add(5 * time.Second)
+	if err := c.conn.WriteControl(websocket.PingMessage, nil, deadline); err != nil {
+		// На случай специфики транспорта — fallback
+		return c.conn.WriteMessage(websocket.PingMessage, nil)
+	}
+	return nil
 }
 
 // Listen читает сообщения и рассылает подписчикам

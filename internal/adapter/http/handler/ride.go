@@ -17,31 +17,35 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type RideService interface {
-	Create(ctx context.Context, ride *models.Ride) (*models.Ride, error)
-	Cancel(ctx context.Context, rideID uuid.UUID, reason string) (*models.Ride, error)
-}
+type (
+	RideService interface {
+		Create(ctx context.Context, ride *models.Ride) (*models.Ride, error)
+		Cancel(ctx context.Context, rideID uuid.UUID, reason string) (*models.Ride, error)
+	}
 
-type TokenValidator interface {
-	RoleCheck(ctx context.Context, token string) (*models.User, error)
-}
+	TokenValidator interface {
+		RoleCheck(ctx context.Context, token string) (*models.User, error)
+	}
 
-type ConnectionHub interface {
-	Add(newConn *wshub.Conn) error
-	Delete(entityID uuid.UUID) error
-}
-type Ride struct {
-	l             logger.Logger
-	ride          RideService
-	auth          TokenValidator
-	wsConnections ConnectionHub
-}
+	ConnectionHub interface {
+		Add(newConn *wshub.Conn) error
+		Delete(entityID uuid.UUID) error
+	}
 
-func NewRide(l logger.Logger, ride RideService, auth TokenValidator) *Ride {
+	Ride struct {
+		l             logger.Logger
+		ride          RideService
+		auth          TokenValidator
+		wsConnections ConnectionHub
+	}
+)
+
+func NewRide(l logger.Logger, ride RideService, auth TokenValidator, wsConnections ConnectionHub) *Ride {
 	return &Ride{
-		l:    l,
-		ride: ride,
-		auth: auth,
+		l:             l,
+		ride:          ride,
+		auth:          auth,
+		wsConnections: wsConnections,
 	}
 }
 
@@ -168,33 +172,20 @@ func (h *Ride) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		wsConn.Close()
 		return
 	}
+	defer h.wsConnections.Delete(passenger.ID)
 
 	h.l.Info(ctx, "websocket connection registered")
-
 	// Heartbeat
 	go func() {
-		defer func() {
-			h.l.Info(ctx, "heartbeat loop stopped")
-			h.wsConnections.Delete(passenger.ID)
-		}()
-
-		if err := conn.HeartbeatLoop(time.Second*30, time.Second*60); err != nil {
+		if err := conn.HeartbeatLoop(time.Second*60, time.Second*30); err != nil {
 			h.l.Error(ctx, "heartbeat loop failed", err)
 		}
 	}()
 
 	// Listen for messages
-	go func() {
-		defer func() {
-			h.l.Info(ctx, "listen loop stopped")
-			h.wsConnections.Delete(passenger.ID)
-		}()
-
-		if err := conn.Listen(); err != nil {
-			h.l.Error(ctx, "websocket listen failed", err)
-		}
-	}()
-
+	if err := conn.Listen(); err != nil {
+		h.l.Error(ctx, "websocket listen failed", err)
+	}
 }
 
 // wsAuthenticate enforces a 5s auth window, expects a JSON text message:
@@ -314,6 +305,5 @@ func (h *Ride) wsAuthenticate(ctx context.Context, conn *websocket.Conn, passeng
 		return nil, err
 	}
 
-	h.l.Info(ctx, "websocket authentication succeeded")
 	return passenger, nil
 }
