@@ -10,8 +10,8 @@ database:
 rabbitmq:
   host: ${RABBITMQ_HOST:-localhost}
   port: ${RABBITMQ_PORT:-5672}
-  user: ${RABBITMQ_USER:-guest}
-  password: ${RABBITMQ_PASSWORD:-guest}
+  user: ${RABBITMQ_USER:-admin}
+  password: ${RABBITMQ_PASSWORD:-admin}
 
 # WebSocket Configuration
 websocket:

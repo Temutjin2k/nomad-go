@@ -90,6 +90,7 @@ type RideRequestedMessage struct {
 	MaxDistanceKm       float64         `json:"max_distance_km"`
 	TimeoutSeconds      int             `json:"timeout_seconds"`
 	CorrelationID       string          `json:"correlation_id"`
+	Priority            uint8           `json:"priority"`
 }
 
 type RideStatusUpdateMessage struct {

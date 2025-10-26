@@ -188,7 +188,7 @@ func (c *Conn) isIdle(timeout time.Duration) bool {
 	return time.Since(c.lastPong) > timeout
 }
 
-func (c *Conn) Send(msg map[string]any) error {
+func (c *Conn) Send(msg any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

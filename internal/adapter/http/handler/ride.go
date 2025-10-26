@@ -108,6 +108,11 @@ func (h *Ride) CancelRide(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request dto.CancelRideRequest
+	if err := readJSON(w, r, &request); err != nil {
+		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to read request JSON data", err)
+		errorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	v := validator.New()
 	request.Validate(v)

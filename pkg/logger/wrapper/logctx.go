@@ -85,3 +85,10 @@ func WithPassengerID(ctx context.Context, passengerID string) context.Context {
 	}
 	return context.WithValue(ctx, LogCtxKey, LogCtx{PassengerID: passengerID})
 }
+
+func GetRequestID(ctx context.Context) string {
+	if lc, ok := ctx.Value(LogCtxKey).(LogCtx); ok {
+		return lc.RequestID
+	}
+	return ""
+}

@@ -22,6 +22,7 @@ var (
 	ErrRideDriverMismatch     = errors.New("ride does not belong to the driver")
 	ErrRideCannotBeCancelled  = errors.New("ride cannot be cancelled")
 	ErrRideNotInProgress      = errors.New("ride is not in progress")
+	ErrInvalidRideStatus      = errors.New("invalid ride status")
 	ErrNotFound               = errors.New("requested item not found")
 	ErrDriverSearchTimeout    = errors.New("driver search time exceeded")
 	ErrDriversNotFound        = errors.New("drivers are not found")

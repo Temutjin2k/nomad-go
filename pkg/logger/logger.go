@@ -134,9 +134,7 @@ func (l *logger) Warn(ctx context.Context, msg string, args ...any) {
 
 func (l *logger) Error(ctx context.Context, msg string, err error, args ...any) {
 	attrs := []any{
-		"error", slog.GroupValue(
-			slog.String("msg", err.Error()),
-		),
+		"error", err.Error(),
 	}
 	attrs = append(attrs, args...)
 	l.slog.ErrorContext(ctx, msg, attrs...)

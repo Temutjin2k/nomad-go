@@ -74,7 +74,7 @@ func New(ctx context.Context, dsn string, log logger.Logger) (*RabbitMQ, error) 
 		}
 	}()
 
-	log.Info(ctx, types.ActionRabbitMQConnected, "connected to rabbitMQ")
+	log.Info(wrap.WithAction(ctx, types.ActionRabbitMQConnected), "connected to rabbitMQ")
 
 	r := &RabbitMQ{
 		Conn:      conn,
@@ -202,7 +202,7 @@ func (r *RabbitMQ) Reconnect(ctx context.Context) error {
 	var conn *amqp.Connection
 	var err error
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		conn, err = amqp.DialConfig(r.dsn, amqp.Config{
 			Heartbeat: 10 * time.Second,
 		})
