@@ -53,9 +53,7 @@ services:
       - "5672:5672"    # AMQP
       - "15672:15672"  # Management UI
     volumes:
-      # данные брокера (mnesia, очередь, персистентные сообщения)
       - ./data/rabbitmq:/var/lib/rabbitmq
-      # конфиг и дефинишны (как у тебя было)
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq_definitions.json:/etc/rabbitmq/rabbitmq_definitions.json:ro
     restart: unless-stopped

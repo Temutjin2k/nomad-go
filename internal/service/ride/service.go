@@ -45,6 +45,17 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 	var createdRide *models.Ride
 
 	err := s.trm.Do(ctx, func(ctx context.Context) error {
+		// проверить, есть ли у пассажира активная поездка
+		activeRide, err := s.repo.CheckActiveRideByPassengerID(ctx, ride.PassengerID)
+		if err != nil {
+			return wrap.Error(ctx, fmt.Errorf("failed to check passenger's active ride: %w", err))
+		}
+
+		// если у пассажира уже есть активная поездка, вернуть ошибку
+		if activeRide != nil {
+			return types.ErrPassengerHasActiveRide
+		}
+
 		distance := s.calculate.Distance(ride.Pickup, ride.Destination)
 		duration := s.calculate.Duration(distance)
 		fare := s.calculate.Fare(ride.RideType, distance, duration)
