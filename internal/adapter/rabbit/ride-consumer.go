@@ -24,7 +24,7 @@ func NewRideConsumer(client *rabbit.RabbitMQ, l logger.Logger) *RideConsumer {
 	return &RideConsumer{client: client, l: l}
 }
 
-type HandlerFunc func(ctx context.Context, req models.RideRequestedMessage) error
+type ConsumeRideHandlerFunc func(ctx context.Context, req models.RideRequestedMessage) error
 
 // declareAndBindQueue объявляет и привязывает очередь к exchange.
 func (r *RideConsumer) declareAndBindQueue(ctx context.Context, queueName, bindingKey, exchangeName string) (amqp.Queue, error) {
@@ -42,7 +42,7 @@ func (r *RideConsumer) declareAndBindQueue(ctx context.Context, queueName, bindi
 	return q, nil
 }
 
-func (r *RideConsumer) handleMessage(ctx context.Context, fn HandlerFunc, msg amqp.Delivery) {
+func (r *RideConsumer) handleMessage(ctx context.Context, fn ConsumeRideHandlerFunc, msg amqp.Delivery) {
 	const op = "RideConsumer.handleMessage"
 
 	var req models.RideRequestedMessage
@@ -74,7 +74,7 @@ func (r *RideConsumer) handleMessage(ctx context.Context, fn HandlerFunc, msg am
 }
 
 // ConsumeRideRequest слушает ride.request.* события и передаёт их в обработчик fn.
-func (r *RideConsumer) ConsumeRideRequest(ctx context.Context, fn HandlerFunc) error {
+func (r *RideConsumer) ConsumeRideRequest(ctx context.Context, fn ConsumeRideHandlerFunc) error {
 	const op = "RideConsumer.ConsumeRideRequest"
 
 	// Основной цикл потребителя
@@ -99,7 +99,7 @@ func (r *RideConsumer) ConsumeRideRequest(ctx context.Context, fn HandlerFunc) e
 		}
 
 		// Объявляем и биндим очередь
-		q, err := r.declareAndBindQueue(ctx, "ride_requests", "ride.request.*", "ride_topic")
+		q, err := r.declareAndBindQueue(ctx, "driver_matching", "ride.request.*", "ride_topic")
 		if err != nil {
 			r.l.Error(ctx, "declare queue failed", err, "op", op)
 			time.Sleep(2 * time.Second)
@@ -137,7 +137,84 @@ func (r *RideConsumer) ConsumeRideRequest(ctx context.Context, fn HandlerFunc) e
 	}
 }
 
-func (r *RideConsumer) ConsumeMatchConfirmation(ctx context.Context) error {
+type MatchConfHandlerFunc func(ctx context.Context, req models.RideStatusUpdateMessage) error
+
+func (r *RideConsumer) ConsumeStatusUpdate(ctx context.Context, fn MatchConfHandlerFunc) error {
 	const op = "RideConsumer.ConsumeMatchConfirmation"
-	return nil
+
+	for {
+		if ctx.Err() != nil {
+			r.l.Debug(ctx, "consume match confirmation stopped by context")
+			return nil
+		}
+
+		// Проверяем и восстанавливаем соединение
+		if err := r.client.EnsureConnection(ctx); err != nil {
+			r.l.Error(ctx, "ensure connection failed", err, "op", op)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// Объявляем exchange
+		if err := r.client.Channel.ExchangeDeclare("ride_topic", "topic", true, false, false, false, nil); err != nil {
+			r.l.Error(ctx, "declare exchange failed", err, "op", op)
+			time.Sleep(3 * time.Second)
+			continue
+		}
+
+		// Объявляем и биндим очередь
+		q, err := r.declareAndBindQueue(ctx, "ride_status", "ride.status.*", "ride_topic")
+		if err != nil {
+			r.l.Error(ctx, "declare queue failed", err, "op", op)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// Подписываемся на очередь
+		msgs, err := r.client.Channel.Consume(q.Name, "", false, false, false, false, nil)
+		if err != nil {
+			r.l.Error(ctx, "consume failed", err, "op", op)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		r.l.Info(ctx, "start consuming match confirmations", "queue", q.Name)
+
+	consumeLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				r.l.Info(ctx, "match confirmation consumer shutting down", "op", op)
+				return nil
+
+			case msg, ok := <-msgs:
+				if !ok {
+					r.l.Warn(ctx, "message channel closed, reconnecting...", "op", op)
+					time.Sleep(2 * time.Second)
+					continue consumeLoop
+				}
+
+				// Обрабатываем сообщение
+				go func(msg amqp.Delivery) {
+					var req models.RideStatusUpdateMessage
+					if err := json.Unmarshal(msg.Body, &req); err != nil {
+						r.l.Error(ctx, "decode failed", err, "op", op)
+						_ = msg.Nack(false, false)
+						return
+					}
+
+					// Вызов обработчика
+					if err := fn(ctx, req); err != nil {
+						r.l.Error(ctx, "handler failed", err, "op", op)
+						_ = msg.Nack(false, false)
+						return
+					}
+
+					if err := msg.Ack(false); err != nil {
+						r.l.Warn(ctx, "ack failed", err, "op", op)
+					}
+				}(msg)
+			}
+		}
+	}
 }

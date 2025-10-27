@@ -66,16 +66,17 @@ type RideStatusChanger interface {
 
 type RideGetter interface {
 	Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
+	GetDetails(ctx context.Context, rideID uuid.UUID) (*models.RideDetails, error)
 }
 
 /*========================Publisher===============================*/
 
 type Publisher interface {
 	PublishDriverStatus(ctx context.Context, msg models.DriverStatusUpdateMessage) error
-	PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error
 	PublishDriverResponse(ctx context.Context, resp models.DriverMatchResponse) error
 }
 
 type Sender interface {
 	SendRideOffer(ctx context.Context, driverID uuid.UUID, offer models.RideOffer) (bool, error)
+	SendRideDetails(ctx context.Context, details models.RideDetails) error
 }

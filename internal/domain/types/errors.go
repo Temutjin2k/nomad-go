@@ -5,6 +5,7 @@ import "errors"
 var (
 	ErrUserNotFound           = errors.New("user not found")
 	ErrSessionNotFound        = errors.New("session not found")
+	ErrDriverIDNotExist       = errors.New("driver ID is not exist")
 	ErrDriverRegistered       = errors.New("driver already registered")
 	ErrDriverAlreadyOnline    = errors.New("driver already online")
 	ErrDriverAlreadyOffline   = errors.New("driver already offline")
@@ -26,4 +27,5 @@ var (
 	ErrNotFound               = errors.New("requested item not found")
 	ErrDriverSearchTimeout    = errors.New("driver search time exceeded")
 	ErrDriversNotFound        = errors.New("drivers are not found")
+	ErrRideStatusNotMatched   = errors.New("ride status must be matched")
 )

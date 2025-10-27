@@ -12,6 +12,7 @@ type (
 		RequestID   string
 		RideID      string
 		PassengerID string
+		DriverID    string
 	}
 
 	// logCtxKeyStruct is an unexported type for context keys defined in this package.
@@ -37,6 +38,9 @@ func WithLogCtx(ctx context.Context, newLc LogCtx) context.Context {
 		if newLc.RideID == "" {
 			newLc.RideID = lc.RideID
 		}
+		if newLc.DriverID == "" {
+			newLc.DriverID = lc.DriverID
+		}
 		return context.WithValue(ctx, LogCtxKey, newLc)
 	}
 	return context.WithValue(ctx, LogCtxKey, newLc)
@@ -49,6 +53,15 @@ func WithUserID(ctx context.Context, userID string) context.Context {
 		return context.WithValue(ctx, LogCtxKey, lc)
 	}
 	return context.WithValue(ctx, LogCtxKey, LogCtx{UserID: userID})
+}
+
+// WithDriverID adds or updates the DriverID in the LogCtx within the context
+func WithDriverID(ctx context.Context, driverID string) context.Context {
+	if lc, ok := ctx.Value(LogCtxKey).(LogCtx); ok {
+		lc.DriverID = driverID
+		return context.WithValue(ctx, LogCtxKey, lc)
+	}
+	return context.WithValue(ctx, LogCtxKey, LogCtx{DriverID: driverID})
 }
 
 // WithRequestID adds or updates the RequestID in the LogCtx within the context
@@ -78,6 +91,7 @@ func WithAction(ctx context.Context, action string) context.Context {
 	return context.WithValue(ctx, LogCtxKey, LogCtx{Action: action})
 }
 
+// WithPassengerID adds or updates the PassengerID in the LogCtx within the context
 func WithPassengerID(ctx context.Context, passengerID string) context.Context {
 	if lc, ok := ctx.Value(LogCtxKey).(LogCtx); ok {
 		lc.PassengerID = passengerID

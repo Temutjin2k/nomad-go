@@ -227,3 +227,26 @@ func (r *RideRepo) UpdateStatus(ctx context.Context, rideID uuid.UUID, status ty
 
 	return nil
 }
+
+func (r *RideRepo) GetDetails(ctx context.Context, rideID uuid.UUID) (*models.RideDetails, error) {
+	const op = "RideRepo.RideDetails"
+	query := `
+		SELECT 
+    		r.id AS ride_id,
+			COALESCE(r.driver_id, ''::uuid) AS driver_id,
+    		u.attrs->>'name' AS passenger_name,
+    		u.attrs->>'phone' AS passenger_phone,
+    		c.latitude AS pickup_latitude,
+    		c.longitude AS pickup_longitude
+		FROM rides r
+		INNER JOIN users u ON r.passenger_id = u.id
+		INNER JOIN coordinates c ON r.pickup_coordinate_id = c.id
+		WHERE r.id = $1;`
+
+	var details models.RideDetails
+	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, rideID).Scan(&details.RideID, &details.DriverID, &details.Passenger.Name, &details.Passenger.Phone, &details.PickupLocation.Latitude, &details.PickupLocation.Longitude); err != nil {
+		return nil, wrap.Error(ctx, fmt.Errorf("%s: failed to get ride details: %w", op, err))
+	}
+
+	return &details, nil
+}

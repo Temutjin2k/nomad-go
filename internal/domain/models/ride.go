@@ -70,6 +70,14 @@ type Ride struct {
 	StartedAt   *time.Time
 	CompletedAt *time.Time
 	CancelledAt *time.Time
+
+	Details RideDetails
+}
+
+type RideDetails struct {
+	RideID   uuid.UUID `json:"ride_id"`
+	DriverID uuid.UUID `json:"driver_id"`
+	Passenger
 }
 
 /* ======================= rabbitmq ======================= */

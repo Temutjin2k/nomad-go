@@ -26,17 +26,6 @@ func NewDriverHub(connHub *ws.ConnectionHub) *DriverHub {
 func (h *DriverHub) SendRideOffer(ctx context.Context, driverID uuid.UUID, offer models.RideOffer) (bool, error) {
 	const op = "DriverHub.SendRideOffer"
 
-	// Преобразуем структуру в map
-	var msg map[string]any
-	data, err := json.Marshal(offer)
-	if err != nil {
-		return false, fmt.Errorf("%s: %w", op, err)
-	}
-
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return false, fmt.Errorf("%s: %w", op, err)
-	}
-
 	conn, err := h.connections.GetConn(driverID)
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)
@@ -46,7 +35,7 @@ func (h *DriverHub) SendRideOffer(ctx context.Context, driverID uuid.UUID, offer
 	conn.Subscribe(offer.ID.String(), ch)
 	defer conn.Unsubscribe(offer.ID.String())
 
-	if err := conn.Send(msg); err != nil {
+	if err := conn.Send(offer); err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -81,4 +70,19 @@ func (h *DriverHub) SendRideOffer(ctx context.Context, driverID uuid.UUID, offer
 	}
 
 	return resp.Accepted, nil
+}
+
+func (h *DriverHub) SendRideDetails(ctx context.Context, details models.RideDetails) error {
+	const op = "DriverHub.SendRideDetails"
+
+	conn, err := h.connections.GetConn(details.DriverID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	if err := conn.Send(details); err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
 }

@@ -78,21 +78,24 @@ var (
 // Register handles new driver registration with license validation,
 // duplicate checks, and initial driver setup.
 func (s *Service) Register(ctx context.Context, newDriver *models.Driver) error {
+	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
+		Action: "register_driver",
+		UserID: newDriver.ID.String(),
+	})
+
 	licenseNum := strings.TrimSpace(newDriver.LicenseNumber)
 	if !validLicenseFmt.MatchString(licenseNum) {
 		return wrap.Error(ctx, types.ErrInvalidLicenseFormat)
 	}
 
 	fn := func(ctx context.Context) error {
-		ctx = wrap.WithAction(ctx, "register_driver")
-
 		// Check license uniqueness
 		uniq, err := s.repos.driver.IsUnique(ctx, licenseNum)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to check license num uniqueness: %w", err))
+			return fmt.Errorf("failed to check license num uniqueness: %w", err)
 		}
 		if !uniq {
-			return wrap.Error(ctx, types.ErrLicenseAlreadyExists)
+			return types.ErrLicenseAlreadyExists
 		}
 
 		newDriver.IsVerified = true
@@ -100,10 +103,10 @@ func (s *Service) Register(ctx context.Context, newDriver *models.Driver) error 
 		// Prevent duplicate driver registration
 		exist, err := s.repos.driver.IsDriverExist(ctx, newDriver.ID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to check driver existence: %w", err))
+			return fmt.Errorf("failed to check driver existence: %w", err)
 		}
 		if exist {
-			return wrap.Error(ctx, types.ErrDriverRegistered)
+			return types.ErrDriverRegistered
 		}
 
 		// Determine vehicle class (Economy / XL / Premium)
@@ -113,11 +116,11 @@ func (s *Service) Register(ctx context.Context, newDriver *models.Driver) error 
 
 		// Save new driver record
 		if err := s.repos.driver.Create(ctx, newDriver); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to create new driver: %w", err))
+			return fmt.Errorf("failed to create new driver: %w", err)
 		}
 
 		if _, err = s.repos.user.ChangeRole(ctx, newDriver.ID, types.RoleDriver); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to change user role to driver: %w", err))
+			return fmt.Errorf("failed to change user role to driver: %w", err)
 		}
 
 		return nil
@@ -125,7 +128,7 @@ func (s *Service) Register(ctx context.Context, newDriver *models.Driver) error 
 
 	// Execute inside transaction
 	if err := s.infra.trm.Do(ctx, fn); err != nil {
-		return err
+		return wrap.Error(ctx, err)
 	}
 
 	return nil
@@ -167,24 +170,27 @@ func classify(driver *models.Driver) types.VehicleClass {
 // GoOnline puts a driver into "available" mode, creates a session,
 // and saves the driver’s current coordinates.
 func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location models.Location) (uuid.UUID, error) {
-	var sessionID uuid.UUID
+	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
+		Action:   "go_online_driver",
+		DriverID: driverID.String(),
+	})
 
+	var sessionID uuid.UUID
 	fn := func(ctx context.Context) error {
-		ctx = wrap.WithAction(ctx, "go_online_driver")
 
 		// Check if driver exists in DB
 		exist, err := s.repos.driver.IsDriverExist(ctx, driverID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to check driver existence: %w", err))
+			return fmt.Errorf("failed to check driver existence: %w", err)
 		}
 		if !exist {
-			return wrap.Error(ctx, types.ErrUserNotFound)
+			return types.ErrUserNotFound
 		}
 
 		// Change driver status to AVAILABLE
 		oldstatus, err := s.repos.driver.ChangeStatus(ctx, driverID, types.StatusDriverAvailable)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to change driver status: %w", err))
+			return fmt.Errorf("failed to change driver status: %w", err)
 		}
 		if oldstatus != types.StatusDriverOffline {
 			return types.ErrDriverAlreadyOnline
@@ -193,7 +199,7 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location mod
 		// Create a new session for the driver
 		sessionID, err = s.repos.session.Create(ctx, driverID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to create driver session: %w", err))
+			return fmt.Errorf("failed to create driver session: %w", err)
 		}
 
 		// Reverse geocoding: get address by latitude and longitude
@@ -204,7 +210,7 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location mod
 
 		// Save driver’s coordinates in the DB
 		if _, err := s.repos.coordinate.CreateCoordinate(ctx, driverID, types.Driver, location, time.Now()); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to insert new coordinate data: %w", err))
+			return fmt.Errorf("failed to insert new coordinate data: %w", err)
 		}
 
 		return nil
@@ -212,31 +218,33 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location mod
 
 	// Execute logic within transaction
 	if err := s.infra.trm.Do(ctx, fn); err != nil {
-		return uuid.UUID{}, err
+		return uuid.UUID{}, wrap.Error(ctx, err)
 	}
 
 	return sessionID, nil
 }
 
 func (s *Service) GoOffline(ctx context.Context, driverID uuid.UUID) (models.SessionSummary, error) {
+	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
+		Action:   "go_offline_driver",
+		DriverID: driverID.String(),
+	})
+
 	var summary models.SessionSummary
-
 	fn := func(ctx context.Context) error {
-		ctx = wrap.WithAction(ctx, "go_offline_driver")
-
 		// Check if driver exists in DB
 		exist, err := s.repos.driver.IsDriverExist(ctx, driverID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to check driver existence: %w", err))
+			return fmt.Errorf("failed to check driver existence: %w", err)
 		}
 		if !exist {
-			return wrap.Error(ctx, types.ErrUserNotFound)
+			return types.ErrUserNotFound
 		}
 
 		// Change driver status to OFFLINE
 		oldstatus, err := s.repos.driver.ChangeStatus(ctx, driverID, types.StatusDriverOffline)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to change driver status: %w", err))
+			return fmt.Errorf("failed to change driver status: %w", err)
 		}
 
 		if oldstatus != types.StatusDriverAvailable {
@@ -250,12 +258,12 @@ func (s *Service) GoOffline(ctx context.Context, driverID uuid.UUID) (models.Ses
 		// Get driver`s session summary
 		summary, err = s.repos.session.GetSummary(ctx, driverID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to get session summary: %w", err))
+			return fmt.Errorf("failed to get session summary: %w", err)
 		}
 
 		// Refresh driver total ride summary
 		if err := s.repos.driver.UpdateStats(ctx, driverID, summary.RidesCompleted, summary.Earnings); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to update driver stats: %w", err))
+			return fmt.Errorf("failed to update driver stats: %w", err)
 		}
 
 		return nil
@@ -263,20 +271,24 @@ func (s *Service) GoOffline(ctx context.Context, driverID uuid.UUID) (models.Ses
 
 	// Execute logic within transaction
 	if err := s.infra.trm.Do(ctx, fn); err != nil {
-		return models.SessionSummary{}, err
+		return models.SessionSummary{}, wrap.Error(ctx, err)
 	}
 
 	return summary, nil
 }
 
 func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, rideID uuid.UUID, location models.Location) error {
-	fn := func(ctx context.Context) error {
-		ctx = wrap.WithAction(ctx, "start_ride")
+	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
+		Action:   "start_ride",
+		RideID:   rideID.String(),
+		DriverID: driverID.String(),
+	})
 
+	fn := func(ctx context.Context) error {
 		// Get driver data
 		driver, err := s.repos.driver.Get(ctx, driverID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to get driver data: %w", err))
+			return fmt.Errorf("failed to get driver data: %w", err)
 		}
 
 		// Ensure driver is EN_ROUTE to pickup location
@@ -287,7 +299,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 		// Get driver last coordinates
 		lastcord, err := s.repos.coordinate.GetDriverLastCoordinate(ctx, driverID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to get driver last coordinate: %w", err))
+			return fmt.Errorf("failed to get driver last coordinate: %w", err)
 		}
 		if lastcord.Latitude == 0 && lastcord.Longitude == 0 {
 			return types.ErrDriverLocationNotFound
@@ -296,7 +308,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 		// Get ride data
 		ride, err := s.repos.ride.Get(ctx, rideID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to get ride data: %w", err))
+			return fmt.Errorf("failed to get ride data: %w", err)
 		}
 
 		// Validate ride status and driver assignment
@@ -314,7 +326,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 
 		// Change driver status in database
 		if _, err := s.repos.driver.ChangeStatus(ctx, driverID, types.StatusDriverBusy); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to change driver status: %w", err))
+			return fmt.Errorf("failed to change driver status: %w", err)
 		}
 
 		// Get address by geocoding
@@ -325,7 +337,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 
 		// Save driver’s coordinates in the DB
 		if _, err := s.repos.coordinate.CreateCoordinate(ctx, driverID, types.Driver, location, time.Now()); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to insert new coordinate data: %w", err))
+			return fmt.Errorf("failed to insert new coordinate data: %w", err)
 		}
 
 		// Update ride status to IN_PROGRESS
@@ -339,26 +351,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 				Location:         models.Location{Latitude: location.Latitude, Longitude: location.Longitude},
 				EstimatedArrival: estimatedArrival,
 			}); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to start ride: %w", err))
-		}
-
-		// Extract correlation_id from context for event tracing
-		logCtx, _ := ctx.Value(wrap.LogCtxKey).(wrap.LogCtx)
-
-		// Publish ride status
-		if err := retry(5, 2*time.Second, func() error {
-			return s.infra.publisher.PublishRideStatus(
-				ctx,
-				models.RideStatusUpdateMessage{
-					RideID:        rideID,
-					Status:        types.StatusInProgress,
-					Timestamp:     startTime,
-					CorrelationID: logCtx.RequestID,
-					// FinalFare will be set when the ride is completed
-					FinalFare: 0,
-				})
-		}); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to publish ride status: %w", err))
+			return fmt.Errorf("failed to start ride: %w", err)
 		}
 
 		// Publish driver status
@@ -379,7 +372,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 	}
 
 	if err := s.infra.trm.Do(ctx, fn); err != nil {
-		return err
+		return wrap.Error(ctx, err)
 	}
 
 	return nil
@@ -405,13 +398,17 @@ type CompleteRideData struct {
 }
 
 func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data CompleteRideData) (earnings float64, err error) {
-	fn := func(ctx context.Context) error {
-		ctx = wrap.WithAction(ctx, "complete_ride")
+	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
+		Action:   "complete_ride",
+		RideID:   rideID.String(),
+		DriverID: data.DriverID.String(),
+	})
 
+	fn := func(ctx context.Context) error {
 		// Get Ride data
 		ride, err := s.repos.ride.Get(ctx, rideID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to get ride data: %w", err))
+			return fmt.Errorf("failed to get ride data: %w", err)
 		}
 
 		// Ride status must be IN_PROGRESS
@@ -422,7 +419,7 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 		// Get Driver data
 		driver, err := s.repos.driver.Get(ctx, data.DriverID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to get driver data: %w", err))
+			return fmt.Errorf("failed to get driver data: %w", err)
 		}
 
 		// Driver status must be BUSY
@@ -433,7 +430,7 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 		// Get driver last coordinates
 		lastcord, err := s.repos.coordinate.GetDriverLastCoordinate(ctx, data.DriverID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to get driver last coordinate: %w", err))
+			return fmt.Errorf("failed to get driver last coordinate: %w", err)
 		}
 
 		// Get address by geocoding
@@ -444,7 +441,7 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 
 		// Save driver’s coordinates in the DB
 		if _, err := s.repos.coordinate.CreateCoordinate(ctx, data.DriverID, types.Driver, data.Location, data.CompleteTime); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to insert new coordinate data: %w", err))
+			return fmt.Errorf("failed to insert new coordinate data: %w", err)
 		}
 
 		// Calculate fare
@@ -468,32 +465,17 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 				DriverID:  data.DriverID,
 				Location:  data.Location,
 			}); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to complete ride:%w", err))
+			return fmt.Errorf("failed to complete ride:%w", err)
 		}
 
 		// Change driver status to AVAILABLE
 		if _, err := s.repos.driver.ChangeStatus(ctx, data.DriverID, types.StatusDriverAvailable); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to change driver status: %w", err))
+			return fmt.Errorf("failed to change driver status: %w", err)
 		}
 
 		// Update driver stats: total rides, earnings
 		if err := s.repos.driver.UpdateStats(ctx, data.DriverID, 1, earnings); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to update driver stats: %w", err))
-		}
-
-		// Publish ride status update
-		if err := retry(5, 2*time.Second, func() error {
-			return s.infra.publisher.PublishRideStatus(
-				ctx,
-				models.RideStatusUpdateMessage{
-					RideID:        rideID,
-					Status:        types.StatusCompleted,
-					Timestamp:     data.CompleteTime,
-					CorrelationID: "",
-					FinalFare:     earnings,
-				})
-		}); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to publish ride status: %w", err))
+			return fmt.Errorf("failed to update driver stats: %w", err)
 		}
 
 		// Publish driver status update
@@ -514,7 +496,7 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 	}
 
 	if err := s.infra.trm.Do(ctx, fn); err != nil {
-		return 0, err
+		return 0, wrap.Error(ctx, err)
 	}
 
 	return earnings, nil
@@ -530,16 +512,20 @@ type UpdateLocationData struct {
 }
 
 func (s *Service) UpdateLocation(ctx context.Context, driverID uuid.UUID, data UpdateLocationData) (coordinateID uuid.UUID, err error) {
-	fn := func(ctx context.Context) error {
-		ctx = wrap.WithAction(ctx, "update_driver_location")
+	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
+		Action:   "update_driver_location",
+		DriverID: driverID.String(),
+		RideID:   data.RideID.String(),
+	})
 
+	fn := func(ctx context.Context) error {
 		// Check if driver exists in DB
 		exist, err := s.repos.driver.IsDriverExist(ctx, driverID)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to check driver existence: %w", err))
+			return fmt.Errorf("failed to check driver existence: %w", err)
 		}
 		if !exist {
-			return wrap.Error(ctx, types.ErrUserNotFound)
+			return types.ErrUserNotFound
 		}
 
 		// Get address by geocoding
@@ -550,18 +536,18 @@ func (s *Service) UpdateLocation(ctx context.Context, driverID uuid.UUID, data U
 
 		coordinateID, err = s.repos.coordinate.CreateCoordinate(ctx, driverID, types.Driver, data.Location, data.UpdateTime)
 		if err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to insert new coordinate data: %w", err))
+			return fmt.Errorf("failed to insert new coordinate data: %w", err)
 		}
 
 		if _, err := s.repos.coordinate.CreateLocationHistory(ctx, coordinateID, driverID, nil, data.Location, data.AccuracyMeters, data.SpeedKmH, data.HeadingDegrees); err != nil {
-			return wrap.Error(ctx, fmt.Errorf("failed to create location history: %w", err))
+			return fmt.Errorf("failed to create location history: %w", err)
 		}
 
 		return nil
 	}
 
 	if err := s.infra.trm.Do(ctx, fn); err != nil {
-		return uuid.UUID{}, err
+		return uuid.UUID{}, wrap.Error(ctx, err)
 	}
 
 	return coordinateID, nil
