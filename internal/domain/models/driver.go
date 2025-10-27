@@ -23,12 +23,12 @@ type Driver struct {
 
 // DriverWithDistance представляет водителя с координатами и расстоянием до точки
 type DriverWithDistance struct {
-	ID         uuid.UUID       `json:"id"`
-	Name       string          `json:"name"`
-	Rating     float64         `json:"rating"`
-	Location   LocationMessage `json:"location"`
-	Vehicle    Vehicle         `json:"vehicle"`
-	DistanceKm float64         `json:"distance_km"`
+	ID         uuid.UUID `json:"id"`
+	Name       string    `json:"name"`
+	Rating     float64   `json:"rating"`
+	Location   Location  `json:"location"`
+	Vehicle    Vehicle   `json:"vehicle"`
+	DistanceKm float64   `json:"distance_km"`
 }
 
 type Vehicle struct {
@@ -44,7 +44,7 @@ type Vehicle struct {
 type DriverStatusUpdateMessage struct {
 	DriverID  uuid.UUID          `json:"driver_id"`
 	Status    types.DriverStatus `json:"status"`
-	RideID    uuid.UUID          `json:"ride_id,omitempty"`
+	RideID    *uuid.UUID         `json:"ride_id,omitempty"`
 	Timestamp time.Time          `json:"timestamp"`
 }
 
@@ -55,21 +55,11 @@ type DriverInfo struct {
 }
 
 type DriverMatchResponse struct {
-	RideID                  uuid.UUID       `json:"ride_id"`
-	DriverID                uuid.UUID       `json:"driver_id"`
-	Accepted                bool            `json:"accepted"`
-	EstimatedArrivalMinutes int             `json:"estimated_arrival_minutes"`
-	DriverLocation          LocationMessage `json:"driver_location"`
-	DriverInfo              DriverInfo      `json:"driver_info"`
-	CorrelationID           string          `json:"correlation_id"`
-}
-
-type DriverLocationUpdate struct {
-	Type           string    `json:"type"`            // тип сообщения, например "location_update"
-	RideID         uuid.UUID `json:"ride_id"`         // идентификатор поездки
-	Latitude       float64   `json:"latitude"`        // широта
-	Longitude      float64   `json:"longitude"`       // долгота
-	AccuracyMeters float64   `json:"accuracy_meters"` // точность GPS
-	SpeedKmh       float64   `json:"speed_kmh"`       // скорость, км/ч
-	HeadingDegrees float64   `json:"heading_degrees"` // направление движения
+	RideID                  uuid.UUID  `json:"ride_id"`
+	DriverID                uuid.UUID  `json:"driver_id"`
+	Accepted                bool       `json:"accepted"`
+	EstimatedArrivalMinutes int        `json:"estimated_arrival_minutes"`
+	DriverLocation          Location   `json:"driver_location"`
+	DriverInfo              DriverInfo `json:"driver_info"`
+	CorrelationID           string     `json:"correlation_id"`
 }

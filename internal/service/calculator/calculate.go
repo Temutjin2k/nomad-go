@@ -9,8 +9,10 @@ import (
 )
 
 const (
-	averageSpeedKmh = 50 // средняя скорость в пути
-	earthRadiusKm   = 6371
+	averageSpeedKmh = 50   // средняя скорость
+	earthRadiusKm   = 6371 // радиус Земли в км
+	earthRadiusM    = 6371000.0
+	arrivalRadius   = 25.0 // радиус прибытия в метрах
 )
 
 type Calculator interface {
@@ -19,12 +21,31 @@ type Calculator interface {
 	Fare(rideType string, distanceKm float64, durationMin int) float64
 	Priority(ride *models.Ride) int
 	EstimatedArrival(startLat, startLon, destLat, destLon float64, vehicleClass types.VehicleClass) time.Time
+	IsDriverArrived(driverLat, driverLng, targetLat, targetLng float64) bool
 }
 
 type CalculatorImpl struct{}
 
 func New() *CalculatorImpl {
 	return &CalculatorImpl{}
+}
+
+// Проверяет, находится ли водитель в радиусе arrivalRadius от цели
+func (c *CalculatorImpl) IsDriverArrived(driverLat, driverLng, targetLat, targetLng float64) bool {
+	dist := c.distanceMeters(driverLat, driverLng, targetLat, targetLng)
+	return dist <= arrivalRadius
+}
+
+func (c *CalculatorImpl) distanceMeters(lat1, lng1, lat2, lng2 float64) float64 {
+	dLat := (lat2 - lat1) * math.Pi / 180
+	dLng := (lng2 - lng1) * math.Pi / 180
+
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*math.Pi/180)*math.Cos(lat2*math.Pi/180)*
+			math.Sin(dLng/2)*math.Sin(dLng/2)
+
+	calc := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	return earthRadiusM * calc
 }
 
 // вычисление расстояние между двумя координатами, используя формулу гаверсинусов в километрах

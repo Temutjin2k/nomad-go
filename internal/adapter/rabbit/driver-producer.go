@@ -12,42 +12,35 @@ import (
 	"github.com/rabbitmq/amqp091-go"
 )
 
+const (
+	driverTopic    = "driver_topic"
+	locationFanout = "location_fanout"
+)
+
 type DriverProducer struct {
-	client   *rabbit.RabbitMQ
-	exchange string
+	client    *rabbit.RabbitMQ
+	exchanges map[string]string
 }
 
 func NewDriverProducer(client *rabbit.RabbitMQ) *DriverProducer {
-	return &DriverProducer{
-		client:   client,
-		exchange: "driver_topic",
+	p := &DriverProducer{
+		client: client,
+		exchanges: map[string]string{
+			driverTopic:    "topic",
+			locationFanout: "fanout",
+		},
 	}
+	return p
 }
 
-// initExchange — гарантирует наличие exchange
-func (r *DriverProducer) initExchange(_ context.Context) error {
-	return r.client.Channel.ExchangeDeclare(
-		r.exchange,
-		"topic",
-		true,  // durable
-		false, // autoDelete
-		false, // internal
-		false, // noWait
-		nil,   // args
-	)
-}
-
-func (r *DriverProducer) publish(ctx context.Context, routingKey string, msg any) error {
-	const op = "DriverProducer.publish"
-
+func (r *DriverProducer) publish(ctx context.Context, exchange, routingKey string, msg any) error {
 	body, err := json.Marshal(msg)
 	if err != nil {
-		return wrap.Error(ctx, fmt.Errorf("%s: marshal: %w", op, err))
+		return fmt.Errorf("marshal: %w", err)
 	}
 
-	// гарантируем, что exchange существует
-	if err := r.initExchange(ctx); err != nil {
-		return wrap.Error(ctx, fmt.Errorf("%s: declare exchange: %w", op, err))
+	if err := r.client.Channel.ExchangeDeclare(exchange, r.exchanges[exchange], true, false, false, false, nil); err != nil {
+		return fmt.Errorf("declare exchange: %w", err)
 	}
 
 	pub := amqp091.Publishing{
@@ -56,23 +49,53 @@ func (r *DriverProducer) publish(ctx context.Context, routingKey string, msg any
 		Timestamp:   time.Now(),
 	}
 
-	if err := r.client.Channel.PublishWithContext(ctx, r.exchange, routingKey, false, false, pub); err != nil {
-		return wrap.Error(ctx, fmt.Errorf("%s: publish: %w", op, err))
+	if err := retry(5, time.Second*2,
+		func() error {
+			return r.client.Channel.PublishWithContext(ctx, exchange, routingKey, false, false, pub)
+		}); err != nil {
+		return fmt.Errorf("publish: %w", err)
+	}
+
+	return nil
+}
+
+func retry(n int, sleep time.Duration, fn func() error) error {
+	var err error
+	for i := 0; i < n; i++ {
+		if err = fn(); err == nil {
+			return nil
+		}
+		time.Sleep(sleep)
+	}
+	return err
+}
+
+func (r *DriverProducer) PublishDriverStatus(ctx context.Context, msg models.DriverStatusUpdateMessage) error {
+	ctx = wrap.WithAction(ctx, "publish_driver_status")
+	key := fmt.Sprintf("driver.status.%s", msg.DriverID)
+
+	if err := r.publish(ctx, driverTopic, key, msg); err != nil {
+		return wrap.Error(ctx, err)
 	}
 	return nil
 }
 
-func (r *DriverProducer) PublishDriverStatus(ctx context.Context, msg models.DriverStatusUpdateMessage) error {
-	key := fmt.Sprintf("driver.status.%s", msg.DriverID)
-	return r.publish(ctx, key, msg)
-}
-
-func (r *DriverProducer) PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error {
-	key := fmt.Sprintf("ride.status.%s", msg.RideID)
-	return r.publish(ctx, key, msg)
-}
-
 func (r *DriverProducer) PublishDriverResponse(ctx context.Context, msg models.DriverMatchResponse) error {
+	ctx = wrap.WithAction(ctx, "publish_driver_response")
 	key := fmt.Sprintf("driver.response.%s", msg.RideID)
-	return r.publish(ctx, key, msg)
+
+	if err := r.publish(ctx, driverTopic, key, msg); err != nil {
+		return wrap.Error(ctx, err)
+	}
+	return nil
+}
+
+func (r *DriverProducer) PublishLocationUpdate(ctx context.Context, msg models.RideLocationUpdate) error {
+	ctx = wrap.WithAction(ctx, "publish_location_update")
+	key := "" // N/A
+
+	if err := r.publish(ctx, driverTopic, key, msg); err != nil {
+		return wrap.Error(ctx, err)
+	}
+	return nil
 }

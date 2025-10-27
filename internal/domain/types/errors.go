@@ -28,4 +28,5 @@ var (
 	ErrDriverSearchTimeout    = errors.New("driver search time exceeded")
 	ErrDriversNotFound        = errors.New("drivers are not found")
 	ErrRideStatusNotMatched   = errors.New("ride status must be matched")
+	ErrListenTimeout          = errors.New("listen timeout")
 )

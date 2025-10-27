@@ -245,8 +245,29 @@ func (r *RideRepo) GetDetails(ctx context.Context, rideID uuid.UUID) (*models.Ri
 
 	var details models.RideDetails
 	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, rideID).Scan(&details.RideID, &details.DriverID, &details.Passenger.Name, &details.Passenger.Phone, &details.PickupLocation.Latitude, &details.PickupLocation.Longitude); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, types.ErrRideNotFound
+		}
 		return nil, wrap.Error(ctx, fmt.Errorf("%s: failed to get ride details: %w", op, err))
 	}
 
 	return &details, nil
+}
+
+func (r *CoordinateRepo) GetPickupCoordinate(ctx context.Context, rideID uuid.UUID) (*models.Location, error) {
+	const op = "CoordinateRepo.GetDestination"
+	query := `
+		SELECT c.latitude, c.longitude, c.address FROM rides r
+		INNER JOIN coordinates c ON r.pickup_coordinate_id = c.id
+		WHERE r.id = $1`
+
+	var location models.Location
+	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, rideID).Scan(&location.Latitude, &location.Longitude, &location.Address); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, types.ErrRideNotFound
+		}
+		return nil, wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
+	}
+
+	return &location, nil
 }
