@@ -24,7 +24,7 @@ type AuthService struct {
 	log logger.Logger
 }
 
-func NewAuth(ctx context.Context, cfg config.Config, log logger.Logger) (*AdminService, error) {
+func NewAuth(ctx context.Context, cfg config.Config, log logger.Logger) (*AuthService, error) {
 	db, err := postgresclient.New(ctx, cfg.Database)
 	if err != nil {
 		return nil, err
@@ -39,12 +39,12 @@ func NewAuth(ctx context.Context, cfg config.Config, log logger.Logger) (*AdminS
 	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, txManager, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authSvc := auth.NewAuthService(userRepo, tokenSvc, log)
 
-	server, err := httpserver.New(cfg, nil, nil, nil, authSvc, log)
+	server, err := httpserver.New(ctx, cfg, nil, nil, nil, authSvc, log)
 	if err != nil {
 		return nil, err
 	}
 
-	return &AdminService{
+	return &AuthService{
 		postgresDB: db,
 		httpServer: server,
 		cfg:        cfg,

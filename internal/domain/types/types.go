@@ -76,3 +76,12 @@ const (
 	StatusCompleted  = "COMPLETED"   // Ride has been successfully completed
 	StatusCancelled  = "CANCELLED"   // Ride was cancelled
 )
+
+func IsValidRideStatus(status RideStatus) bool {
+	switch status {
+	case StatusRequested, StatusMatched, StatusEnRoute, StatusArrived, StatusInProgress, StatusCompleted, StatusCancelled:
+		return true
+	default:
+		return false
+	}
+}

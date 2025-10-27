@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
@@ -22,19 +23,34 @@ func NewCoordinateRepo(db *pgxpool.Pool) *CoordinateRepo {
 	}
 }
 
-func (r *CoordinateRepo) Create(ctx context.Context, entityID uuid.UUID, entityType types.EntityType, address string, latitude, longitude float64) (uuid.UUID, error) {
-	const op = "CoordinateRepo.Create"
+func (r *CoordinateRepo) CreateCoordinate(ctx context.Context, entityID uuid.UUID, entityType types.EntityType, location models.Location, updatedAt time.Time) (uuid.UUID, error) {
+	const op = "CoordinateRepo.CreateCoordinate"
 	query := `
-		INSERT INTO coordinates(entity_id,entity_type, address, latitude, longitude)
-		VALUES($1, $2, $3, $4, $5)
-		RETURNING ID;`
+		INSERT INTO coordinates (entity_id, entity_type, address, latitude, longitude, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id;
+	`
 
 	var id uuid.UUID
-	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, entityID, entityType, address, latitude, longitude).Scan(&id); err != nil {
+	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, entityID, entityType, location.Address, location.Latitude, location.Longitude, updatedAt).Scan(&id); err != nil {
 		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
 		return uuid.UUID{}, wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
 	}
 
+	return id, nil
+}
+
+func (r *CoordinateRepo) CreateLocationHistory(ctx context.Context, coordinateID, driverID uuid.UUID, rideID *uuid.UUID, location models.Location, accuracyMeters, speedKmh, headingDegrees float64) (uuid.UUID, error) {
+	const op = "CoordinateRepo.CreateLocationHistory"
+	query := `
+		INSERT INTO location_history(coordinate_id, driver_id, latitude, longitude, accuracy_meters, speed_kmh, heading_degrees, ride_id)
+		VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING ID;`
+	var id uuid.UUID
+	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, coordinateID, driverID, location.Latitude, location.Longitude, accuracyMeters, speedKmh, headingDegrees, rideID).Scan(&id); err != nil {
+		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
+		return uuid.UUID{}, wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
+	}
 	return id, nil
 }
 

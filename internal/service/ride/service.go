@@ -2,10 +2,13 @@ package ride
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
 
+	wshandler "github.com/Temutjin2k/ride-hail-system/internal/adapter/http/ws"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	ridecalc "github.com/Temutjin2k/ride-hail-system/internal/service/calculator"
@@ -21,15 +24,18 @@ type RideService struct {
 	trm       trm.TxManager
 	publisher RideMsgBroker
 	calculate ridecalc.Calculator
+
+	passengerSender *wshandler.RideWsHandler
 }
 
-func NewRideService(repo RideRepo, calculate ridecalc.Calculator, logger logger.Logger, trm trm.TxManager, publisher RideMsgBroker) *RideService {
+func NewRideService(repo RideRepo, calculate ridecalc.Calculator, trm trm.TxManager, publisher RideMsgBroker, passengerSender *wshandler.RideWsHandler, logger logger.Logger) *RideService {
 	return &RideService{
-		repo:      repo,
-		logger:    logger,
-		calculate: calculate,
-		trm:       trm,
-		publisher: publisher,
+		repo:            repo,
+		calculate:       calculate,
+		trm:             trm,
+		publisher:       publisher,
+		passengerSender: passengerSender,
+		logger:          logger,
 	}
 }
 
@@ -61,6 +67,11 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		}
 		ctx = wrap.WithRideID(ctx, createdRide.ID.String())
 
+		correlationID := wrap.GetRequestID(ctx) // Используем RequestID как CorrelationID
+		if correlationID == "" {                // На случай, если RequestID отсутствует
+			correlationID = newCorrelationID()
+		}
+
 		message := models.RideRequestedMessage{
 			RideID:     createdRide.ID,
 			RideNumber: createdRide.RideNumber,
@@ -78,7 +89,8 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 			EstimatedFare:  createdRide.EstimatedFare,
 			MaxDistanceKm:  5.0, // Это чтобы не ожидать драйвера из какого нибудь Мадагаскара
 			TimeoutSeconds: 120,
-			CorrelationID:  createdRide.RideNumber,
+			CorrelationID:  correlationID,
+			Priority:       uint8(createdRide.Priority),
 		}
 
 		if err := s.publisher.PublishRideRequested(ctx, message); err != nil {
@@ -126,11 +138,11 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 		}
 
 		message := models.RideStatusUpdateMessage{
-			RideID:        cancelledRide.ID,
-			Status:        cancelledRide.Status,
-			Timestamp:     *cancelledRide.CancelledAt,
-			DriverID:      cancelledRide.DriverID,
-			CorrelationID: cancelledRide.RideNumber,
+			RideID:        ride.ID,
+			Status:        ride.Status,
+			Timestamp:     *ride.CancelledAt,
+			DriverID:      ride.DriverID,
+			CorrelationID: ride.RideNumber,
 		}
 
 		if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
@@ -148,4 +160,13 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 	s.logger.Info(ctx, "ride cancelled successfully")
 
 	return cancelledRide, nil
+}
+
+func newCorrelationID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// fallback to timestamp if crypto/rand fails
+		return hex.EncodeToString(fmt.Appendf(nil, "%d", time.Now().UnixNano()))
+	}
+	return hex.EncodeToString(b)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
+	"github.com/Temutjin2k/ride-hail-system/pkg/postgres"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 )
 
@@ -37,6 +38,9 @@ func (r *DriverRepo) Create(ctx context.Context, driver *models.Driver) error {
 		driver.IsVerified,
 		driver.Vehicle,
 	); err != nil {
+		if postgres.IsForeignKeyViolation(err) {
+			return types.ErrUserNotFound
+		}
 		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
 		return wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
 	}
@@ -161,4 +165,51 @@ func (r *DriverRepo) Get(ctx context.Context, driverID uuid.UUID) (*models.Drive
 	}
 
 	return &driver, nil
+}
+
+func (r *DriverRepo) SearchDrivers(ctx context.Context, rideType string, pickUplocation models.Location) ([]models.DriverWithDistance, error) {
+	const op = "DriverRepo.SearchDrivers"
+	query := `
+		SELECT d.id, d.rating, c.latitude, c.longitude, d.vehicle_attrs, name,
+       		ST_Distance(
+         	ST_MakePoint(c.longitude, c.latitude)::geography,
+         	ST_MakePoint($1, $2)::geography
+       		) / 1000 as distance_km
+		FROM drivers d
+		JOIN users u ON d.id = u.id
+		JOIN coordinates c ON c.entity_id = d.id
+  			AND c.entity_type = 'driver'
+  			AND c.is_current = true
+		WHERE d.status = 'AVAILABLE'
+  			AND d.vehicle_type = $3
+  			AND ST_DWithin(
+        		ST_MakePoint(c.longitude, c.latitude)::geography,
+        		ST_MakePoint($1, $2)::geography,
+        		5000  -- 5km radius
+      		)
+		ORDER BY distance_km, d.rating DESC
+		LIMIT 10;`
+
+	rows, err := TxorDB(ctx, r.db).Query(ctx, query, pickUplocation.Longitude, pickUplocation.Latitude, rideType)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	drivers, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (models.DriverWithDistance, error) {
+		var driver models.DriverWithDistance
+		if err := rows.Scan(&driver.ID, &driver.Rating, &driver.Location.Lat, &driver.Location.Lng, &driver.Vehicle, &driver.Name, &driver.DistanceKm); err != nil {
+			return models.DriverWithDistance{}, fmt.Errorf("%s: %w", op, err)
+		}
+
+		return driver, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return drivers, nil
 }

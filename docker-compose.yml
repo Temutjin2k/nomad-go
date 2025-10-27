@@ -9,7 +9,7 @@ volumes:
 
 services: 
   postgresql:
-    image: postgres:16.3
+    image: postgis/postgis:16-3.4
     hostname: postgresql
     ports:
       - 5432:5432
@@ -46,21 +46,21 @@ services:
 
   rabbitmq:
     image: rabbitmq:management
-    container_name: rabbitmq
     hostname: rabbitmq
-    ports:
-      - "5672:5672"   # AMQP (default RabbitMQ port)
-      - "15672:15672" # Management UI
     networks:
       - net
-    environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      # данные брокера (mnesia, очередь, персистентные сообщения)
+      - ./data/rabbitmq:/var/lib/rabbitmq
+      # конфиг и дефинишны (как у тебя было)
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq_definitions.json:/etc/rabbitmq/rabbitmq_definitions.json:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && nc -z localhost 5672"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

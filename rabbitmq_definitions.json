@@ -1,0 +1,155 @@
+{
+    "users": [
+        {
+            "name": "admin",
+            "password": "admin",
+            "tags": "administrator"
+        }
+    ],
+    "vhosts": [
+        {
+            "name": "/"
+        }
+    ],
+    "permissions": [
+        {
+            "user": "admin",
+            "vhost": "/",
+            "configure": ".*",
+            "write": ".*",
+            "read": ".*"
+        }
+    ],
+    "exchanges": [
+        {
+            "name": "ride_topic",
+            "vhost": "/",
+            "type": "topic",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        },
+        {
+            "name": "driver_topic",
+            "vhost": "/",
+            "type": "topic",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        },
+        {
+            "name": "location_fanout",
+            "vhost": "/",
+            "type": "fanout",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        },
+        {
+            "name": "dlx",
+            "vhost": "/",
+            "type": "direct",
+            "durable": true,
+            "auto_delete": false,
+            "internal": false,
+            "arguments": {}
+        }
+    ],
+    "queues": [
+        {
+            "name": "ride_requests",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "dead_messages"
+            }
+        },
+        {
+            "name": "ride_status",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "dead_messages"
+            }
+        },
+        {
+            "name": "driver_responses",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "dead_messages"
+            }
+        },
+        {
+            "name": "driver_status",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "dead_messages"
+            }
+        },
+        {
+            "name": "location_updates",
+            "vhost": "/",
+            "durable": true,
+            "auto_delete": false,
+            "arguments": {
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": "dead_messages"
+            }
+        }
+    ],
+    "bindings": [
+        {
+            "source": "ride_topic",
+            "vhost": "/",
+            "destination": "ride_requests",
+            "destination_type": "queue",
+            "routing_key": "ride.request.*",
+            "arguments": {}
+        },
+        {
+            "source": "ride_topic",
+            "vhost": "/",
+            "destination": "ride_status",
+            "destination_type": "queue",
+            "routing_key": "ride.status.*",
+            "arguments": {}
+        },
+        {
+            "source": "driver_topic",
+            "vhost": "/",
+            "destination": "driver_responses",
+            "destination_type": "queue",
+            "routing_key": "driver.response.*",
+            "arguments": {}
+        },
+        {
+            "source": "driver_topic",
+            "vhost": "/",
+            "destination": "driver_status",
+            "destination_type": "queue",
+            "routing_key": "driver.status.*",
+            "arguments": {}
+        },
+        {
+            "source": "location_fanout",
+            "vhost": "/",
+            "destination": "location_updates",
+            "destination_type": "queue",
+            "routing_key": "location",
+            "arguments": {}
+        }
+    ]
+}

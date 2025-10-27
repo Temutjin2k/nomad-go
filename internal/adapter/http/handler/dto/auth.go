@@ -7,12 +7,15 @@ import (
 
 type RegisterUserRequest struct {
 	Name     string         `json:"name"`
+	Phone    string         `json:"phone"`
 	Email    string         `json:"email"`
 	Password string         `json:"password"`
 	Attrs    map[string]any `json:"attrs,omitempty"`
 }
 
 func (r *RegisterUserRequest) ToModel() *models.UserCreateRequest {
+	r.Attrs["name"] = r.Name
+	r.Attrs["phone"] = r.Phone
 	return &models.UserCreateRequest{
 		Name:     r.Name,
 		Email:    r.Email,
@@ -50,4 +53,14 @@ func ValidateLogin(v *validator.Validator, user *LoginRequest) {
 
 func ValidateRefreshToken(v *validator.Validator, req *RefreshTokenRequest) {
 	v.Check(req.RefreshToken != "", "refresh_token", "must be provided")
+}
+
+type AuthWebSocketReq struct {
+	Type  string `json:"type"`
+	Token string `json:"token"`
+}
+
+type AuthWebSocketResp struct {
+	Type        string `json:"type"`
+	PassengerID string `json:"passenger_id"`
 }

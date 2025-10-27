@@ -49,3 +49,6 @@ run-admin:
 
 run-auth:
 	go run main.go --mode=auth-service
+
+run-ride:
+	go run main.go --mode=ride-service

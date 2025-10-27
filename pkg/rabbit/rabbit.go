@@ -18,6 +18,7 @@ type RabbitMQ struct {
 	closeChan chan *amqp.Error
 	isClosed  bool
 	mu        sync.Mutex
+	dsn       string
 
 	log logger.Logger
 }
@@ -38,28 +39,49 @@ func New(ctx context.Context, dsn string, log logger.Logger) (*RabbitMQ, error) 
 		return nil, fmt.Errorf("failed to open a channel: %w", err)
 	}
 
-	// Create close notification channel
-	closeChan := make(chan *amqp.Error, 1)
-	conn.NotifyClose(closeChan)
+	// Create separate close channels
+	connCloseChan := make(chan *amqp.Error, 1)
+	chCloseChan := make(chan *amqp.Error, 1)
 
-	// Verify the connection is alive
-	select {
-	case closeErr := <-closeChan:
-		if closeErr != nil {
-			return nil, fmt.Errorf("rabbitmq connection is closed: %w", closeErr)
+	conn.NotifyClose(connCloseChan)
+	channel.NotifyClose(chCloseChan)
+
+	// Merge both channels into one for monitoring
+	mergedCloseChan := make(chan *amqp.Error, 2)
+	go func() {
+		for {
+			select {
+			case err := <-connCloseChan:
+				if err != nil {
+					log.Error(ctx, "RabbitMQ connection closed", err)
+					mergedCloseChan <- err
+				} else {
+					log.Debug(ctx, "RabbitMQ connection closed gracefully")
+					mergedCloseChan <- nil
+				}
+				return
+
+			case err := <-chCloseChan:
+				if err != nil {
+					log.Error(ctx, "RabbitMQ channel closed", err)
+					mergedCloseChan <- err
+				} else {
+					log.Debug(ctx, "RabbitMQ channel closed gracefully")
+					mergedCloseChan <- nil
+				}
+				return
+			}
 		}
-		return nil, fmt.Errorf("rabbitmq connection is closed")
-	default:
-		// Connection is good
-	}
+	}()
 
-	log.Info(ctx, types.ActionRabbitMQConnected, "connected to rabbitMQ")
+	log.Info(wrap.WithAction(ctx, types.ActionRabbitMQConnected), "connected to rabbitMQ")
 
 	r := &RabbitMQ{
 		Conn:      conn,
 		Channel:   channel,
-		closeChan: closeChan,
+		closeChan: mergedCloseChan,
 		isClosed:  false,
+		dsn:       dsn,
 		log:       log,
 	}
 
@@ -88,7 +110,7 @@ func (r *RabbitMQ) IsConnectionClosed() bool {
 	if r.Conn == nil {
 		return true
 	}
-	return r.isClosed || r.Conn.IsClosed()
+	return r.isClosed || r.Conn.IsClosed() || r.Channel.IsClosed()
 }
 
 // Close closes rabbit connection
@@ -163,4 +185,76 @@ func closeWithCtxFunc(ctx context.Context, fn func() error) error {
 		// Return context error; goroutine can still write into the buffered channel and exit.
 		return ctx.Err()
 	}
+}
+
+func (r *RabbitMQ) Reconnect(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.dsn == "" {
+		return fmt.Errorf("dsn is empty: can't reconnect")
+	}
+
+	if !r.isClosed && r.Conn != nil && !r.Conn.IsClosed() && r.Channel != nil && !r.Channel.IsClosed() {
+		return nil
+	}
+
+	var conn *amqp.Connection
+	var err error
+
+	for i := range 5 {
+		conn, err = amqp.DialConfig(r.dsn, amqp.Config{
+			Heartbeat: 10 * time.Second,
+		})
+		if err == nil {
+			break
+		}
+
+		wait := time.Duration(i+1) * 2 * time.Second
+		r.log.Debug(ctx, fmt.Sprintf("reconnect attempt %d failed, retrying in %v", i+1, wait))
+
+		select {
+		case <-ctx.Done():
+			r.log.Debug(ctx, "graceful shutdown — stopping reconnect attempts")
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to reconnect to RabbitMQ: %w", err)
+	}
+
+	ch, err := conn.Channel()
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("failed to open a channel after reconnect: %w", err)
+	}
+
+	closeChan := make(chan *amqp.Error, 1)
+	conn.NotifyClose(closeChan)
+
+	r.Conn = conn
+	r.Channel = ch
+	r.closeChan = closeChan
+	r.isClosed = false
+
+	// Возобновляем мониторинг
+	go r.monitorConnection()
+
+	ctx = wrap.WithAction(context.Background(), types.ActionRabbitReconnected)
+	r.log.Info(ctx, "RabbitMQ reconnected successfully")
+
+	return nil
+}
+
+func (r *RabbitMQ) EnsureConnection(ctx context.Context) error {
+	if r.IsConnectionClosed() {
+		r.log.Warn(ctx, "rabbit connection closed, reconnecting...")
+		if err := r.Reconnect(ctx); err != nil {
+			return fmt.Errorf("failed to reconnect to RabbitMQ: %w", err)
+		}
+		r.log.Info(ctx, "RabbitMQ reconnected successfully")
+	}
+	return nil
 }

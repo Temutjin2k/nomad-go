@@ -13,6 +13,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
+	wshub "github.com/Temutjin2k/ride-hail-system/pkg/wsHub"
 )
 
 const serverIPAddress = "%s:%s"
@@ -37,8 +38,9 @@ type handlers struct {
 }
 
 func New(
+	ctx context.Context,
 	cfg config.Config,
-	driverService handler.DriverService,
+	driverService *handler.DriverServiceOptions,
 	rideService handler.RideService,
 	adminService handler.AdminService,
 	authService handler.AuthService,
@@ -54,10 +56,10 @@ func New(
 	switch cfg.Mode {
 	case types.RideService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.RideService)
-		handlers.ride = handler.NewRide(logger, rideService)
+		handlers.ride = handler.NewRide(logger, rideService, authService, wshub.NewConnHub(logger))
 	case types.DriverAndLocationService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.DriverLocationService)
-		handlers.driver = handler.NewDriver(driverService, logger)
+		handlers.driver = handler.NewDriver(ctx, logger, driverService)
 	case types.AdminService:
 		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.AdminService)
 		handlers.admin = handler.NewAdmin(adminService, logger)

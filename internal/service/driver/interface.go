@@ -14,10 +14,11 @@ import (
 type DriverRepo interface {
 	LicenseChecker
 	Create(ctx context.Context, driver *models.Driver) error
+	IsDriverExist(ctx context.Context, id uuid.UUID) (bool, error)
 	Get(ctx context.Context, driverID uuid.UUID) (*models.Driver, error)
+	SearchDrivers(ctx context.Context, rideType string, pickUplocation models.Location) ([]models.DriverWithDistance, error)
 	ChangeStatus(ctx context.Context, driverID uuid.UUID, newStatus types.DriverStatus) (oldStatus types.DriverStatus, err error)
 	UpdateStats(ctx context.Context, driverID uuid.UUID, ridesCompleted int, earnings float64) error
-	IsDriverExist(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
 type LicenseChecker interface {
@@ -34,7 +35,8 @@ type DriverSessionRepo interface {
 /*=================Coordinate Repository==========================*/
 
 type CoordinateRepo interface {
-	Create(ctx context.Context, entityID uuid.UUID, entityType types.EntityType, address string, latitude, longitude float64) (uuid.UUID, error)
+	CreateCoordinate(ctx context.Context, entityID uuid.UUID, entityType types.EntityType, location models.Location, updatedAt time.Time) (uuid.UUID, error)
+	CreateLocationHistory(ctx context.Context, coordinateID, driverID uuid.UUID, rideID *uuid.UUID, location models.Location, accuracyMeters, speedKmh, headingDegrees float64) (uuid.UUID, error)
 	GetDriverLastCoordinate(ctx context.Context, driverID uuid.UUID) (models.Location, error)
 }
 
@@ -64,10 +66,17 @@ type RideStatusChanger interface {
 
 type RideGetter interface {
 	Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
+	GetDetails(ctx context.Context, rideID uuid.UUID) (*models.RideDetails, error)
 }
 
 /*========================Publisher===============================*/
+
 type Publisher interface {
 	PublishDriverStatus(ctx context.Context, msg models.DriverStatusUpdateMessage) error
-	PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error
+	PublishDriverResponse(ctx context.Context, resp models.DriverMatchResponse) error
+}
+
+type Sender interface {
+	SendRideOffer(ctx context.Context, driverID uuid.UUID, offer models.RideOffer) (bool, error)
+	SendRideDetails(ctx context.Context, details models.RideDetails) error
 }

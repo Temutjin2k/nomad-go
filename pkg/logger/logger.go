@@ -21,7 +21,6 @@ type Logger interface {
 	Info(ctx context.Context, msg string, args ...any)
 	Warn(ctx context.Context, msg string, args ...any)
 	Error(ctx context.Context, msg string, err error, args ...any)
-	GetSlogLogger() *slog.Logger
 }
 
 type logger struct {
@@ -104,6 +103,9 @@ func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
 		if c.RideID != "" {
 			r.AddAttrs(slog.String("ride_id", c.RideID))
 		}
+		if c.PassengerID != "" {
+			r.AddAttrs(slog.String("passenger_id", c.PassengerID))
+		}
 	}
 
 	return h.handler.Handle(ctx, r)
@@ -132,9 +134,7 @@ func (l *logger) Warn(ctx context.Context, msg string, args ...any) {
 
 func (l *logger) Error(ctx context.Context, msg string, err error, args ...any) {
 	attrs := []any{
-		"error", slog.GroupValue(
-			slog.String("msg", err.Error()),
-		),
+		"error", err.Error(),
 	}
 	attrs = append(attrs, args...)
 	l.slog.ErrorContext(ctx, msg, attrs...)
