@@ -17,6 +17,9 @@ type RideRepo interface {
 	UpdateMatchedAt(ctx context.Context, rideID uuid.UUID) error
 	// для генерации уникального номера поездки (ride_number)
 	CountByDate(ctx context.Context, date time.Time) (int, error)
+
+	// проверить, есть ли у пассажира активная поездка
+	CheckActiveRideByPassengerID(ctx context.Context, passengerID uuid.UUID) (*models.Ride, error)
 }
 
 type RideMsgBroker interface {
