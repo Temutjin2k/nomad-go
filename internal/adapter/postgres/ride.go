@@ -250,3 +250,41 @@ func (r *RideRepo) GetDetails(ctx context.Context, rideID uuid.UUID) (*models.Ri
 
 	return &details, nil
 }
+
+func (r *RideRepo) CheckActiveRideByPassengerID(ctx context.Context, passengerID uuid.UUID) (*models.Ride, error) {
+	q := TxorDB(ctx, r.db)
+
+	// Active rides are those not completed or cancelled
+	query := `
+        SELECT
+            r.id, r.ride_number, r.status, r.passenger_id, r.driver_id, r.vehicle_type,
+            r.estimated_fare, r.final_fare, r.cancellation_reason,
+            r.created_at, r.matched_at, r.arrived_at, r.started_at, r.completed_at, r.cancelled_at,
+            p.address as pickup_address, p.latitude as pickup_lat, p.longitude as pickup_lon,
+            d.address as dest_address, d.latitude as dest_lat, d.longitude as dest_lon
+        FROM rides r
+        JOIN coordinates p ON r.pickup_coordinate_id = p.id
+        JOIN coordinates d ON r.destination_coordinate_id = d.id
+        WHERE r.passenger_id = $1
+          AND r.status IN ('REQUESTED','MATCHED','EN_ROUTE','ARRIVED','IN_PROGRESS')
+        ORDER BY r.created_at DESC
+        LIMIT 1;`
+
+	var ride models.Ride
+	err := q.QueryRow(ctx, query, passengerID).Scan(
+		&ride.ID, &ride.RideNumber, &ride.Status, &ride.PassengerID, &ride.DriverID, &ride.RideType,
+		&ride.EstimatedFare, &ride.FinalFare, &ride.CancellationReason,
+		&ride.CreatedAt, &ride.MatchedAt, &ride.ArrivedAt, &ride.StartedAt, &ride.CompletedAt, &ride.CancelledAt,
+		&ride.Pickup.Address, &ride.Pickup.Latitude, &ride.Pickup.Longitude,
+		&ride.Destination.Address, &ride.Destination.Latitude, &ride.Destination.Longitude,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &ride, nil
+}
