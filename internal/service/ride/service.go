@@ -75,15 +75,15 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		message := models.RideRequestedMessage{
 			RideID:     createdRide.ID,
 			RideNumber: createdRide.RideNumber,
-			PickupLocation: models.LocationMessage{
-				Lat:     createdRide.Pickup.Latitude,
-				Lng:     createdRide.Pickup.Longitude,
-				Address: createdRide.Pickup.Address,
+			PickupLocation: models.Location{
+				Latitude:  createdRide.Pickup.Latitude,
+				Longitude: createdRide.Pickup.Longitude,
+				Address:   createdRide.Pickup.Address,
 			},
-			DestinationLocation: models.LocationMessage{
-				Lat:     createdRide.Destination.Latitude,
-				Lng:     createdRide.Destination.Longitude,
-				Address: createdRide.Destination.Address,
+			DestinationLocation: models.Location{
+				Latitude:  createdRide.Destination.Latitude,
+				Longitude: createdRide.Destination.Longitude,
+				Address:   createdRide.Destination.Address,
 			},
 			RideType:       createdRide.RideType,
 			EstimatedFare:  createdRide.EstimatedFare,

@@ -23,7 +23,7 @@ func NewRideWsHandler(connections *ws.ConnectionHub) *RideWsHandler {
 
 // TODO: imporove написал на скорую руку
 // SendDriverLocation
-func (h *RideWsHandler) SendDriverLocation(ctx context.Context, passengerID uuid.UUID, location *models.DriverLocationUpdate) error {
+func (h *RideWsHandler) SendDriverLocation(ctx context.Context, passengerID uuid.UUID, location *models.RideLocationUpdate) error {
 	ctx = wrap.WithAction(ctx, "ws_send_driver_location")
 	conn, err := h.connections.GetConn(passengerID)
 	if err != nil {
