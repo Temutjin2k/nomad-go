@@ -42,10 +42,10 @@ type Vehicle struct {
 
 // DriverStatusUpdateMessage — структура сообщения для обновления статуса водителя
 type DriverStatusUpdateMessage struct {
-	DriverID  uuid.UUID          `json:"driver_id"`
-	Status    types.DriverStatus `json:"status"`
-	RideID    *uuid.UUID         `json:"ride_id,omitempty"`
-	Timestamp time.Time          `json:"timestamp"`
+	DriverID  uuid.UUID  `json:"driver_id"`
+	Status    string     `json:"status"`
+	RideID    *uuid.UUID `json:"ride_id,omitempty"`
+	Timestamp time.Time  `json:"timestamp"`
 }
 
 type DriverInfo struct {

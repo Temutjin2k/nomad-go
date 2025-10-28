@@ -117,7 +117,7 @@ func (s *Service) offerRideToDriver(ctx context.Context, correlationID string, d
 		// Publish driver status update
 		if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
 			DriverID:  driver.ID,
-			Status:    types.StatusDriverBusy,
+			Status:    types.StatusDriverBusy.String(),
 			Timestamp: time.Now(),
 			RideID:    &offer.RideID,
 		}); err != nil {
@@ -204,7 +204,7 @@ func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpd
 	ctx = wrap.WithDriverID(ctx, req.DriverID.String())
 
 	// Ride Cancel
-	switch req.Status {
+	switch types.RideStatus(req.Status) {
 	case types.StatusCancelled:
 		if err := s.cancelRide(ctx, *req.DriverID, req.RideID); err != nil {
 			return wrap.Error(ctx, err)
@@ -243,7 +243,7 @@ func (s *Service) cancelRide(ctx context.Context, driverID, rideID uuid.UUID) er
 
 		if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
 			DriverID:  driverID,
-			Status:    types.StatusDriverAvailable,
+			Status:    types.StatusDriverAvailable.String(),
 			Timestamp: time.Now(),
 			RideID:    &rideID,
 		}); err != nil {
@@ -272,7 +272,7 @@ func (s *Service) processMatchedRide(ctx context.Context, driverID, rideID uuid.
 
 		if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
 			DriverID:  driverID,
-			Status:    types.StatusDriverEnRoute,
+			Status:    types.StatusDriverEnRoute.String(),
 			Timestamp: time.Now(),
 			RideID:    &details.RideID,
 		}); err != nil {
@@ -293,7 +293,7 @@ func (s *Service) processDriverLocation(ctx context.Context, cancel context.Canc
 	}
 
 	return s.infra.trm.Do(ctx, func(ctx context.Context) error {
-		if _, err := s.repos.driver.ChangeStatus(ctx, current.DriverID, types.StatusArrived); err != nil {
+		if _, err := s.repos.driver.ChangeStatus(ctx, current.DriverID, types.DriverStatus(types.StatusArrived)); err != nil {
 			return fmt.Errorf("failed to change driver status: %w", err)
 		}
 
@@ -301,7 +301,7 @@ func (s *Service) processDriverLocation(ctx context.Context, cancel context.Canc
 			ctx,
 			models.DriverStatusUpdateMessage{
 				DriverID:  current.DriverID,
-				Status:    types.StatusArrived,
+				Status:    types.StatusArrived.String(),
 				Timestamp: time.Now(),
 				RideID:    current.RideID,
 			}); err != nil {

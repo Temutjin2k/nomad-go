@@ -2,6 +2,7 @@ package ride
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
@@ -16,6 +17,9 @@ type (
 		Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
 		UpdateStatus(ctx context.Context, rideID uuid.UUID, status types.RideStatus) error
 		UpdateMatchedAt(ctx context.Context, rideID uuid.UUID) error
+		UpdateArrivedAt(ctx context.Context, rideID uuid.UUID) error
+		UpdateCompletedAt(ctx context.Context, rideID uuid.UUID) error
+		UpdateStartedAt(ctx context.Context, rideID uuid.UUID) error
 		// для генерации уникального номера поездки (ride_number)
 		CountByDate(ctx context.Context, date time.Time) (int, error)
 
@@ -30,5 +34,11 @@ type (
 
 	RideWsHandler interface {
 		SendToPassenger(ctx context.Context, passengerID uuid.UUID, data any) error
+	}
+
+	// RideEventRepository defines methods for logging ride events.
+	RideEventRepository interface {
+		// CreateEvent записывает событие, связанное с поездкой в таблицу ride_events
+		CreateEvent(ctx context.Context, rideID uuid.UUID, eventType types.RideEvent, eventData json.RawMessage) error
 	}
 )
