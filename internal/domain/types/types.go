@@ -29,6 +29,7 @@ const (
 	StatusDriverAvailable DriverStatus = "AVAILABLE"
 	StatusDriverBusy      DriverStatus = "BUSY"
 	StatusDriverEnRoute   DriverStatus = "EN_ROUTE"
+	StatusDriverArrived   DriverStatus = "ARRIVED"
 )
 
 // Enum для статуса пользователя

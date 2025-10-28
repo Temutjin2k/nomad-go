@@ -213,7 +213,7 @@ func (r *RideMsgBroker) ConsumeDriverResponse(ctx context.Context, handler Drive
 	}
 }
 
-type LocationUpdateHandler func(ctx context.Context, req models.DriverLocationUpdate) error
+type LocationUpdateHandler func(ctx context.Context, req models.RideLocationUpdate) error
 
 func (r *RideMsgBroker) ConsumeDriverLocationUpdate(ctx context.Context, handler LocationUpdateHandler) error {
 	ctx = wrap.WithAction(ctx, "rabbitmq_consume_driver_location")
@@ -257,7 +257,7 @@ func (r *RideMsgBroker) ConsumeDriverLocationUpdate(ctx context.Context, handler
 
 				// handle each message in its own goroutine
 				go func(d amqp091.Delivery) {
-					var req models.DriverLocationUpdate
+					var req models.RideLocationUpdate
 					if err := json.Unmarshal(d.Body, &req); err != nil {
 						r.l.Error(ctx, "failed to unmarshal driver location update", err)
 						_ = d.Nack(false, false)
@@ -265,6 +265,12 @@ func (r *RideMsgBroker) ConsumeDriverLocationUpdate(ctx context.Context, handler
 					}
 
 					// enrich context for logging/tracing
+					if req.RideID == nil {
+						// Обработать/Отклонить
+						d.Ack(false)
+						return
+					}
+
 					ctx = wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), d.CorrelationId)
 
 					if err := handler(ctx, req); err != nil {

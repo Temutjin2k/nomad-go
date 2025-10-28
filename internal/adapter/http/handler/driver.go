@@ -36,7 +36,7 @@ type DriverService interface {
 	GoOffline(ctx context.Context, driverID uuid.UUID) (models.SessionSummary, error)
 	StartRide(ctx context.Context, startTime time.Time, driverID, rideID uuid.UUID, location models.Location) error
 	CompleteRide(ctx context.Context, rideID uuid.UUID, data drivergo.CompleteRideData) (earnings float64, err error)
-	UpdateLocation(ctx context.Context, driverID uuid.UUID, data drivergo.UpdateLocationData) (coordinateID uuid.UUID, err error)
+	UpdateLocation(ctx context.Context, data models.RideLocationUpdate) (coordinateID uuid.UUID, err error)
 }
 
 var upgrader = websocket.Upgrader{
@@ -320,17 +320,20 @@ func (h *Driver) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 
-	coordinateID, err := h.service.UpdateLocation(ctx, driverID,
-		drivergo.UpdateLocationData{
+	coordinateID, err := h.service.UpdateLocation(ctx, models.RideLocationUpdate{
+		DriverID:  driverID,
+		RideID:    nil,
+		TimeStamp: now,
+		Coordinates: models.Coordinates{
+			AccuracyMeters: req.AccuracyMeters,
+			SpeedKmh:       req.SpeedKmH,
+			HeadingDegrees: req.HeadingDegrees,
 			Location: models.Location{
 				Latitude:  *req.Latitude,
 				Longitude: *req.Longitude,
 			},
-			UpdateTime:     now,
-			AccuracyMeters: req.AccuracyMeters,
-			SpeedKmH:       req.SpeedKmH,
-			HeadingDegrees: req.HeadingDegrees,
-		})
+		},
+	})
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to update driver location", err)
 		errorResponse(w, GetCode(err), err.Error())
@@ -405,15 +408,13 @@ func (h *Driver) HandleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Listen for messages
-	go func() {
-		defer func() {
-			h.l.Info(ctx, "listen loop stopped", "driver_id", driverID)
-			h.wsConnections.Delete(driverID)
-		}()
-
-		if err := conn.Listen(); err != nil {
-			h.l.Error(ctx, "websocket listen failed", err, "driver_id", driverID)
-		}
+	defer func() {
+		h.l.Info(ctx, "listen loop stopped", "driver_id", driverID)
+		h.wsConnections.Delete(driverID)
 	}()
+
+	// Listen for messages
+	if err := conn.Listen(); err != nil {
+		h.l.Error(ctx, "websocket listen failed", err, "driver_id", driverID)
+	}
 }

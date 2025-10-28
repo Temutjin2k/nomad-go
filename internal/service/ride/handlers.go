@@ -56,6 +56,6 @@ func (s *RideService) handleNotAccepted(ctx context.Context, msg models.DriverMa
 	return nil
 }
 
-func (s *RideService) HandleDriverLocationUpdate(ctx context.Context, msg models.DriverLocationUpdate) error {
+func (s *RideService) HandleDriverLocationUpdate(ctx context.Context, msg models.RideLocationUpdate) error {
 	return nil
 }

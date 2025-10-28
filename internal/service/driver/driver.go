@@ -32,7 +32,7 @@ type logic struct {
 }
 
 type infra struct {
-	sender        Sender
+	communicator  DriverCommunicator
 	addressGetter GeoCoder
 	publisher     Publisher
 	trm           trm.TxManager
@@ -41,13 +41,13 @@ type infra struct {
 type repos struct {
 	driver     DriverRepo
 	session    DriverSessionRepo
-	ride       RideRepo
+	ride       RideGetter
 	user       UserRepo
 	coordinate CoordinateRepo
 }
 
 // New returns a new instance of the driver service with all dependencies injected.
-func New(driverRepo DriverRepo, sessionRepo DriverSessionRepo, coordinateRepo CoordinateRepo, userRepo UserRepo, rideRepo RideRepo, addressGetter GeoCoder, publisher Publisher, calculate ridecalc.Calculator, sender Sender, trm trm.TxManager, l logger.Logger) *Service {
+func New(driverRepo DriverRepo, sessionRepo DriverSessionRepo, coordinateRepo CoordinateRepo, userRepo UserRepo, rideRepo RideGetter, addressGetter GeoCoder, publisher Publisher, calculate ridecalc.Calculator, communicator DriverCommunicator, trm trm.TxManager, l logger.Logger) *Service {
 	return &Service{
 		repos: repos{
 			driver:     driverRepo,
@@ -62,7 +62,7 @@ func New(driverRepo DriverRepo, sessionRepo DriverSessionRepo, coordinateRepo Co
 		infra: infra{
 			addressGetter: addressGetter,
 			publisher:     publisher,
-			sender:        sender,
+			communicator:  communicator,
 			trm:           trm,
 		},
 		l: l,
@@ -85,12 +85,13 @@ func (s *Service) Register(ctx context.Context, newDriver *models.Driver) error 
 
 	licenseNum := strings.TrimSpace(newDriver.LicenseNumber)
 	if !validLicenseFmt.MatchString(licenseNum) {
+		s.l.Debug(ctx, "Invalid license format", "license", newDriver.LicenseNumber)
 		return wrap.Error(ctx, types.ErrInvalidLicenseFormat)
 	}
 
 	fn := func(ctx context.Context) error {
 		// Check license uniqueness
-		uniq, err := s.repos.driver.IsUnique(ctx, licenseNum)
+		uniq, err := s.repos.driver.IsLicenseExists(ctx, licenseNum)
 		if err != nil {
 			return fmt.Errorf("failed to check license num uniqueness: %w", err)
 		}
@@ -177,6 +178,7 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location mod
 
 	var sessionID uuid.UUID
 	fn := func(ctx context.Context) error {
+		now := time.Now()
 
 		// Check if driver exists in DB
 		exist, err := s.repos.driver.IsDriverExist(ctx, driverID)
@@ -209,8 +211,20 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location mod
 		}
 
 		// Save driver’s coordinates in the DB
-		if _, err := s.repos.coordinate.CreateCoordinate(ctx, driverID, types.Driver, location, time.Now()); err != nil {
+		if _, err := s.repos.coordinate.CreateCoordinate(ctx, driverID, types.Driver, location, now); err != nil {
 			return fmt.Errorf("failed to insert new coordinate data: %w", err)
+		}
+
+		// Publish driver status
+		if err := s.infra.publisher.PublishDriverStatus(
+			ctx,
+			models.DriverStatusUpdateMessage{
+				DriverID:  driverID,
+				Status:    types.StatusDriverAvailable,
+				Timestamp: now,
+				RideID:    nil,
+			}); err != nil {
+			return fmt.Errorf("failed to publish driver status: %w", err)
 		}
 
 		return nil
@@ -232,6 +246,8 @@ func (s *Service) GoOffline(ctx context.Context, driverID uuid.UUID) (models.Ses
 
 	var summary models.SessionSummary
 	fn := func(ctx context.Context) error {
+		now := time.Now()
+
 		// Check if driver exists in DB
 		exist, err := s.repos.driver.IsDriverExist(ctx, driverID)
 		if err != nil {
@@ -264,6 +280,18 @@ func (s *Service) GoOffline(ctx context.Context, driverID uuid.UUID) (models.Ses
 		// Refresh driver total ride summary
 		if err := s.repos.driver.UpdateStats(ctx, driverID, summary.RidesCompleted, summary.Earnings); err != nil {
 			return fmt.Errorf("failed to update driver stats: %w", err)
+		}
+
+		// Publish driver status
+		if err := s.infra.publisher.PublishDriverStatus(
+			ctx,
+			models.DriverStatusUpdateMessage{
+				DriverID:  driverID,
+				Status:    types.StatusDriverOffline,
+				Timestamp: now,
+				RideID:    nil,
+			}); err != nil {
+			return fmt.Errorf("failed to publish driver status: %w", err)
 		}
 
 		return nil
@@ -321,9 +349,6 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 			return types.ErrRideDriverMismatch
 		}
 
-		// Calculate estimated arrival time to pickup location
-		estimatedArrival := s.logic.calculate.EstimatedArrival(location.Latitude, location.Longitude, lastcord.Latitude, lastcord.Longitude, driver.Vehicle.Type)
-
 		// Change driver status in database
 		if _, err := s.repos.driver.ChangeStatus(ctx, driverID, types.StatusDriverBusy); err != nil {
 			return fmt.Errorf("failed to change driver status: %w", err)
@@ -340,32 +365,16 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 			return fmt.Errorf("failed to insert new coordinate data: %w", err)
 		}
 
-		// Update ride status to IN_PROGRESS
-		// and create a ride event
-		if err := s.repos.ride.StartRide(
-			ctx, rideID, driverID, startTime,
-			models.RideEvent{
-				OldStatus:        types.StatusArrived,
-				NewStatus:        types.StatusInProgress,
-				DriverID:         driverID,
-				Location:         models.Location{Latitude: location.Latitude, Longitude: location.Longitude},
-				EstimatedArrival: estimatedArrival,
-			}); err != nil {
-			return fmt.Errorf("failed to start ride: %w", err)
-		}
-
 		// Publish driver status
-		if err := retry(5, 2*time.Second, func() error {
-			return s.infra.publisher.PublishDriverStatus(
-				ctx,
-				models.DriverStatusUpdateMessage{
-					DriverID:  driverID,
-					Status:    types.StatusDriverBusy,
-					Timestamp: startTime,
-					RideID:    rideID,
-				})
-		}); err != nil {
-			s.l.Warn(ctx, "failed to publish driver status", "error", err.Error())
+		if err := s.infra.publisher.PublishDriverStatus(
+			ctx,
+			models.DriverStatusUpdateMessage{
+				DriverID:  driverID,
+				Status:    types.StatusDriverBusy,
+				Timestamp: startTime,
+				RideID:    &rideID,
+			}); err != nil {
+			return fmt.Errorf("failed to publish driver status: %w", err)
 		}
 
 		return nil
@@ -376,17 +385,6 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 	}
 
 	return nil
-}
-
-func retry(n int, sleep time.Duration, fn func() error) error {
-	var err error
-	for i := 0; i < n; i++ {
-		if err = fn(); err == nil {
-			return nil
-		}
-		time.Sleep(sleep)
-	}
-	return err
 }
 
 type CompleteRideData struct {
@@ -410,6 +408,7 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 		if err != nil {
 			return fmt.Errorf("failed to get ride data: %w", err)
 		}
+		earnings = ride.EstimatedFare
 
 		// Ride status must be IN_PROGRESS
 		if ride.Status != types.StatusInProgress {
@@ -427,12 +426,6 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 			return types.ErrDriverMustBeBusy
 		}
 
-		// Get driver last coordinates
-		lastcord, err := s.repos.coordinate.GetDriverLastCoordinate(ctx, data.DriverID)
-		if err != nil {
-			return fmt.Errorf("failed to get driver last coordinate: %w", err)
-		}
-
 		// Get address by geocoding
 		data.Location.Address, err = s.infra.addressGetter.GetAddress(ctx, data.Location.Longitude, data.Location.Latitude)
 		if err != nil {
@@ -444,52 +437,26 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 			return fmt.Errorf("failed to insert new coordinate data: %w", err)
 		}
 
-		// Calculate fare
-		distance := s.logic.calculate.Distance(models.Location{
-			Latitude:  data.Location.Latitude,
-			Longitude: data.Location.Longitude,
-		},
-			models.Location{
-				Latitude:  lastcord.Latitude,
-				Longitude: lastcord.Longitude,
-			},
-		)
-		durationMin := s.logic.calculate.Duration(distance)
-		earnings = s.logic.calculate.Fare(ride.RideType, distance, durationMin)
-
-		// Update ride status to COMPLETED
-		if err := s.repos.ride.CompleteRide(ctx, rideID, data.DriverID, data.CompleteTime,
-			models.RideEvent{
-				OldStatus: types.StatusInProgress,
-				NewStatus: types.StatusCompleted,
-				DriverID:  data.DriverID,
-				Location:  data.Location,
-			}); err != nil {
-			return fmt.Errorf("failed to complete ride:%w", err)
-		}
-
 		// Change driver status to AVAILABLE
 		if _, err := s.repos.driver.ChangeStatus(ctx, data.DriverID, types.StatusDriverAvailable); err != nil {
 			return fmt.Errorf("failed to change driver status: %w", err)
 		}
 
-		// Update driver stats: total rides, earnings
-		if err := s.repos.driver.UpdateStats(ctx, data.DriverID, 1, earnings); err != nil {
+		// Update driver session: total rides, earnings
+		if err := s.repos.session.Update(ctx, data.DriverID, 1, earnings); err != nil {
 			return fmt.Errorf("failed to update driver stats: %w", err)
 		}
 
 		// Publish driver status update
-		if err := retry(5, 2*time.Second, func() error {
-			return s.infra.publisher.PublishDriverStatus(
-				ctx,
-				models.DriverStatusUpdateMessage{
-					DriverID:  data.DriverID,
-					Status:    types.StatusDriverAvailable,
-					Timestamp: data.CompleteTime,
-					RideID:    rideID,
-				})
-		}); err != nil {
-			s.l.Warn(ctx, "failed to publish driver status", "error", err.Error())
+		if err := s.infra.publisher.PublishDriverStatus(
+			ctx,
+			models.DriverStatusUpdateMessage{
+				DriverID:  data.DriverID,
+				Status:    types.StatusDriverAvailable,
+				Timestamp: data.CompleteTime,
+				RideID:    &rideID,
+			}); err != nil {
+			return fmt.Errorf("failed to publish driver status: %w", err)
 		}
 
 		return nil
@@ -502,25 +469,16 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 	return earnings, nil
 }
 
-type UpdateLocationData struct {
-	UpdateTime     time.Time
-	Location       models.Location
-	RideID         uuid.UUID
-	AccuracyMeters float64
-	SpeedKmH       float64
-	HeadingDegrees float64
-}
-
-func (s *Service) UpdateLocation(ctx context.Context, driverID uuid.UUID, data UpdateLocationData) (coordinateID uuid.UUID, err error) {
+func (s *Service) UpdateLocation(ctx context.Context, data models.RideLocationUpdate) (coordinateID uuid.UUID, err error) {
 	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
 		Action:   "update_driver_location",
-		DriverID: driverID.String(),
+		DriverID: data.DriverID.String(),
 		RideID:   data.RideID.String(),
 	})
 
 	fn := func(ctx context.Context) error {
 		// Check if driver exists in DB
-		exist, err := s.repos.driver.IsDriverExist(ctx, driverID)
+		exist, err := s.repos.driver.IsDriverExist(ctx, data.DriverID)
 		if err != nil {
 			return fmt.Errorf("failed to check driver existence: %w", err)
 		}
@@ -534,13 +492,17 @@ func (s *Service) UpdateLocation(ctx context.Context, driverID uuid.UUID, data U
 			s.l.Warn(ctx, "Failed to get address", "error", err.Error())
 		}
 
-		coordinateID, err = s.repos.coordinate.CreateCoordinate(ctx, driverID, types.Driver, data.Location, data.UpdateTime)
+		coordinateID, err = s.repos.coordinate.CreateCoordinate(ctx, data.DriverID, types.Driver, data.Location, data.TimeStamp)
 		if err != nil {
 			return fmt.Errorf("failed to insert new coordinate data: %w", err)
 		}
 
-		if _, err := s.repos.coordinate.CreateLocationHistory(ctx, coordinateID, driverID, nil, data.Location, data.AccuracyMeters, data.SpeedKmH, data.HeadingDegrees); err != nil {
+		if _, err := s.repos.coordinate.CreateLocationHistory(ctx, coordinateID, data.DriverID, data.RideID, data.Location, data.AccuracyMeters, data.SpeedKmh, data.HeadingDegrees); err != nil {
 			return fmt.Errorf("failed to create location history: %w", err)
+		}
+
+		if err := s.infra.publisher.PublishLocationUpdate(ctx, data); err != nil {
+			return fmt.Errorf("failed to publish location update: %w", err)
 		}
 
 		return nil

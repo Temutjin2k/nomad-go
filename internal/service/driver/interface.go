@@ -22,7 +22,7 @@ type DriverRepo interface {
 }
 
 type LicenseChecker interface {
-	IsUnique(ctx context.Context, validLicenseNum string) (bool, error)
+	IsLicenseExists(ctx context.Context, validLicenseNum string) (bool, error)
 }
 
 /*=================Driver Session Repository======================*/
@@ -30,6 +30,7 @@ type LicenseChecker interface {
 type DriverSessionRepo interface {
 	Create(ctx context.Context, driverID uuid.UUID) (sessiondID uuid.UUID, err error)
 	GetSummary(ctx context.Context, driverID uuid.UUID) (models.SessionSummary, error)
+	Update(ctx context.Context, driverID uuid.UUID, ridesCompleted int, earnings float64) error
 }
 
 /*=================Coordinate Repository==========================*/
@@ -54,19 +55,10 @@ type UserRepo interface {
 
 /*=====================Ride Repository============================*/
 
-type RideRepo interface {
-	RideStatusChanger
-	RideGetter
-}
-
-type RideStatusChanger interface {
-	StartRide(ctx context.Context, rideID, driverID uuid.UUID, startedAt time.Time, rideEvent models.RideEvent) error
-	CompleteRide(ctx context.Context, rideID, driverID uuid.UUID, completedAt time.Time, rideEvent models.RideEvent) error
-}
-
 type RideGetter interface {
 	Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
 	GetDetails(ctx context.Context, rideID uuid.UUID) (*models.RideDetails, error)
+	GetPickupCoordinate(ctx context.Context, rideID uuid.UUID) (*models.Location, error)
 }
 
 /*========================Publisher===============================*/
@@ -74,9 +66,13 @@ type RideGetter interface {
 type Publisher interface {
 	PublishDriverStatus(ctx context.Context, msg models.DriverStatusUpdateMessage) error
 	PublishDriverResponse(ctx context.Context, resp models.DriverMatchResponse) error
+	PublishLocationUpdate(ctx context.Context, msg models.RideLocationUpdate) error
 }
 
-type Sender interface {
+/*===========================Sender===============================*/
+
+type DriverCommunicator interface {
 	SendRideOffer(ctx context.Context, driverID uuid.UUID, offer models.RideOffer) (bool, error)
 	SendRideDetails(ctx context.Context, details models.RideDetails) error
+	ListenLocationUpdates(ctx context.Context, driverID, rideID uuid.UUID, handler func(ctx context.Context, location models.RideLocationUpdate) error) error
 }

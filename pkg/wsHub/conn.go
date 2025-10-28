@@ -15,8 +15,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var ErrListenTimeout = errors.New("listen timeout")
-
 // Conn представляет собой одно соединение WebSocket, связанное с сущностью (например, драйвером)
 type Conn struct {
 	conn        *websocket.Conn

@@ -48,9 +48,9 @@ func (r *DriverRepo) Create(ctx context.Context, driver *models.Driver) error {
 	return nil
 }
 
-// IsUnique checks driver uniqueness by license num
-func (r *DriverRepo) IsUnique(ctx context.Context, validLicenseNum string) (bool, error) {
-	const op = "DriverRepo.IsUnique"
+// IsLicenseExists checks driver uniqueness by license num
+func (r *DriverRepo) IsLicenseExists(ctx context.Context, validLicenseNum string) (bool, error) {
+	const op = "DriverRepo.IsLicenseExists"
 	query := `
 		SELECT EXISTS(
 			SELECT 1 FROM drivers
@@ -197,7 +197,7 @@ func (r *DriverRepo) SearchDrivers(ctx context.Context, rideType string, pickUpl
 
 	drivers, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (models.DriverWithDistance, error) {
 		var driver models.DriverWithDistance
-		if err := rows.Scan(&driver.ID, &driver.Rating, &driver.Location.Lat, &driver.Location.Lng, &driver.Vehicle, &driver.Name, &driver.DistanceKm); err != nil {
+		if err := rows.Scan(&driver.ID, &driver.Rating, &driver.Location.Latitude, &driver.Location.Longitude, &driver.Vehicle, &driver.Name, &driver.DistanceKm); err != nil {
 			return models.DriverWithDistance{}, fmt.Errorf("%s: %w", op, err)
 		}
 
