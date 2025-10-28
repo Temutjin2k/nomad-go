@@ -36,12 +36,10 @@ func (s *RideService) HandleDriverResponse(ctx context.Context, msg models.Drive
 			s.logger.Warn(ctx, "status already changed, skipping", "current_status", ride.Status)
 			return types.ErrInvalidRideStatus
 		}
-	
+
 		// if err := s.repo.Update(ctx, ride); err != nil {
 		// 	return err
 		// }w
-
-
 
 		if err := s.repo.UpdateStatus(ctx, msg.RideID, types.StatusMatched); err != nil {
 			return err
@@ -68,10 +66,9 @@ func (s *RideService) HandleDriverResponse(ctx context.Context, msg models.Drive
 
 		passengerID = ride.PassengerID
 
-		
-	if err := s.passengerSender.SendToPassenger(ctx, passengerID, msg); err != nil {
-		return err
-	}
+		if err := s.passengerSender.SendToPassenger(ctx, passengerID, msg); err != nil {
+			return err
+		}
 
 		return nil
 	}); err != nil {
@@ -88,16 +85,20 @@ func (s *RideService) handleNotAccepted(ctx context.Context, msg models.DriverMa
 	return nil
 }
 
-func (s *RideService) HandleDriverLocationUpdate(ctx context.Context, msg models.DriverLocationUpdate) error {
+func (s *RideService) HandleDriverLocationUpdate(ctx context.Context, msg models.RideLocationUpdate) error {
 	ctx = wrap.WithAction(wrap.WithRideID(ctx, msg.RideID.String()), "handle_driver_location_update")
 
+	if msg.RideID == nil {
+		return types.ErrRideNotFound
+	}
+
 	var (
-		 PassengerID uuid.UUID
-		 wsMessage models.PassengerLocationUpdateDTO
+		PassengerID uuid.UUID
+		wsMessage   models.PassengerLocationUpdateDTO
 	)
 
 	if err := s.trm.Do(ctx, func(ctx context.Context) error {
-		ride, err := s.repo.Get(ctx, msg.RideID)
+		ride, err := s.repo.Get(ctx, *msg.RideID)
 		if err != nil {
 			return err
 		}
@@ -124,35 +125,35 @@ func (s *RideService) HandleDriverLocationUpdate(ctx context.Context, msg models
 
 		// (Опционально) Рассчитываем оставшееся расстояние и время
 		driverCurrentLocation := models.Location{
-			Latitude:  msg.Latitude,
-			Longitude: msg.Longitude,
+			Latitude:  msg.Location.Latitude,
+			Longitude: msg.Location.Longitude,
 		}
-		distanceKm := calculateDistance(driverCurrentLocation, targetLocation)
-		durationMin := calculateDuration(distanceKm)
+
+		distanceKm := s.calculate.Distance(driverCurrentLocation, targetLocation)
+		durationMin := s.calculate.Duration(distanceKm)
 
 		// 5. Формируем сообщение для WebSocket
 		wsMessage = models.PassengerLocationUpdateDTO{
-			Type:   "driver_location_update",
+			Type:   types.EventLocationUpdated.String(),
 			RideID: ride.ID,
-			DriverLocation: models.LocationMessage{
-				Lat: msg.Latitude,
-				Lng: msg.Longitude,
+			DriverLocation: models.Location{
+				Latitude:  msg.Location.Latitude,
+				Longitude: msg.Location.Longitude,
 			},
-			DistanceRemainingKm: distanceKm,
-			EstimatedArrival:    time.Now().Add(time.Duration(durationMin) * time.Minute),
+			DistanceToPickupKm: distanceKm,
+			EstimatedArrival:   time.Now().Add(time.Duration(durationMin) * time.Minute),
 		}
 		PassengerID = ride.PassengerID
 		return nil
-		}); err != nil {
+	}); err != nil {
 		return err
 	}
 
-		if err := s.passengerSender.SendToPassenger(ctx, PassengerID, wsMessage); err != nil {
-			// Это не фатальная ошибка, мы не должны NACK'ать сообщение в RabbitMQ.
-			// Пассажир просто пропустит одно обновление координат.
-			s.logger.Warn(ctx, "failed to send websocket location update to passenger", "error", err, "passenger_id", PassengerID)
-		}
-
+	if err := s.passengerSender.SendToPassenger(ctx, PassengerID, wsMessage); err != nil {
+		// Это не фатальная ошибка, мы не должны NACK'ать сообщение в RabbitMQ.
+		// Пассажир просто пропустит одно обновление координат.
+		s.logger.Warn(ctx, "failed to send websocket location update to passenger", "error", err, "passenger_id", PassengerID)
+	}
 
 	return nil
 }

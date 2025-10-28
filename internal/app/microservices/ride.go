@@ -38,7 +38,6 @@ type RideConsumers struct {
 	log          logger.Logger
 }
 
-
 func (c *RideConsumers) Start(ctx context.Context, errCh chan error) {
 	go func() {
 		c.log.Info(ctx, "Ride request consume has been started")
@@ -94,7 +93,7 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 		consumers: &RideConsumers{
 			rideConsumer: rabbitRideBroker,
 			rideService:  rideService,
-			log:         log,
+			log:          log,
 		},
 
 		cfg: cfg,

@@ -12,7 +12,6 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/rabbit"
-	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 )
 
 const (
@@ -126,7 +125,6 @@ func (r *RideMsgBroker) PublishRideStatus(ctx context.Context, msg models.RideSt
 	return nil
 }
 
-
 // TODO: подумать нужно ли это вообще
 type DriverStatusUpdateHandler func(ctx context.Context, req models.DriverStatusUpdateMessage) error
 
@@ -224,15 +222,12 @@ func (r *RideMsgBroker) ConsumeDriverLocationUpdate(ctx context.Context, handler
 			continue
 		}
 
-		const queue = "location_topic"
 		msgs, err := r.client.Channel.Consume(r.QueueLocationUpdate, "", false, false, false, false, nil)
 		if err != nil {
 			r.l.Error(ctx, "consume failed", err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
-
-		r.l.Info(ctx, "start consuming driver location updates", "queue", queue)
 
 	consumeLoop:
 		for {

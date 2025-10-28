@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 
-	wshandler "github.com/Temutjin2k/ride-hail-system/internal/adapter/http/ws"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	ridecalc "github.com/Temutjin2k/ride-hail-system/internal/service/calculator"
@@ -25,10 +24,10 @@ type RideService struct {
 	publisher RideMsgBroker
 	calculate ridecalc.Calculator
 
-	passengerSender wshandler.RideWsHandler
+	passengerSender RideWsHandler
 }
 
-func NewRideService(repo RideRepo, calculate ridecalc.Calculator, trm trm.TxManager, publisher RideMsgBroker, passengerSender wshandler.RideWsHandler, logger logger.Logger) *RideService {
+func NewRideService(repo RideRepo, calculate ridecalc.Calculator, trm trm.TxManager, publisher RideMsgBroker, passengerSender RideWsHandler, logger logger.Logger) *RideService {
 	return &RideService{
 		repo:            repo,
 		calculate:       calculate,
