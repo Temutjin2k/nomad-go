@@ -3,6 +3,7 @@ package rabbit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -191,7 +192,7 @@ func (r *RideBroker) ConsumeDriverStatusUpdate(ctx context.Context, handler Driv
 
 type DriverResponseHandler func(ctx context.Context, req models.DriverMatchResponse) error
 
-func (r *RideMsgBroker) ConsumeDriverResponse(ctx context.Context, targetRideID uuid.UUID, handler DriverResponseHandler) error {
+func (r *RideBroker) ConsumeDriverResponse(ctx context.Context, targetRideID uuid.UUID, handler DriverResponseHandler) error {
 	ctx = wrap.WithAction(ctx, "rabbitmq_consume_driver_response")
 
 	// Основной цикл потребителя
@@ -224,7 +225,7 @@ func (r *RideMsgBroker) ConsumeDriverResponse(ctx context.Context, targetRideID 
 			select {
 			case <-ctx.Done():
 				r.l.Info(ctx, "driver response consumer shutting down")
-				return nil
+				return errors.New("failed to get response for targetRideID")
 
 			case msg, ok := <-msgs:
 				if !ok {
