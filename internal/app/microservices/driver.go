@@ -34,7 +34,7 @@ type DriverService struct {
 }
 
 type Consumers struct {
-	rideConsumer *rabbitAdapter.RideConsumer
+	rideConsumer *rabbitAdapter.DriverBroker
 	uc           *drivergo.Service
 	log          logger.Logger
 }
@@ -82,11 +82,8 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 	refreshTokenRepo := repo.NewRefreshTokenRepo(postgresDB.Pool)
 	eventRepo := repo.NewRideEvent(postgresDB.Pool)
 
-	// Message Broker publisher
-	driverProducer := rabbitAdapter.NewDriverProducer(rabbitMq)
-
-	// Message Broker consumer
-	rideConsumer := rabbitAdapter.NewRideConsumer(rabbitMq, log)
+	// Message Broker
+	driverProducer := rabbitAdapter.NewDriverClient(rabbitMq, log)
 
 	// External API client
 	locationIQclient := locationIQ.New(cfg.ExternalAPIConfig.LocationIQapiKey)
@@ -118,6 +115,7 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 	options := &handler.DriverServiceOptions{
 		WsConnections: wsHub,
 		Service:       driverService,
+		Auth:          authService,
 	}
 
 	httpServer, err := server.New(ctx, cfg, options, nil, nil, authService, log)
@@ -131,7 +129,7 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 		postgresDB: postgresDB,
 		rabbitMQ:   rabbitMq,
 		consumers: Consumers{
-			rideConsumer: rideConsumer,
+			rideConsumer: driverProducer,
 			uc:           driverService,
 			log:          log,
 		},
@@ -154,7 +152,7 @@ func (s *DriverService) Start(ctx context.Context) error {
 	shutdownCh := make(chan os.Signal, 1)
 	signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
 
-	s.log.Info(ctx, "Driver has been service started")
+	s.log.Info(ctx, "Driver service has been started")
 
 	select {
 	case errRun := <-errCh:

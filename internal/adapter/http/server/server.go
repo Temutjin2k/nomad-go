@@ -120,5 +120,5 @@ func (a *API) Run(ctx context.Context, errCh chan<- error) {
 
 // withMiddleware applies middlewares to the mux
 func (a *API) withMiddleware() http.Handler {
-	return a.m.Recover(a.m.RequestID(a.m.Auth(a.mux)))
+	return a.m.RequestID(a.m.Auth(a.mux))
 }
