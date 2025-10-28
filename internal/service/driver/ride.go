@@ -14,8 +14,10 @@ import (
 
 func (s *Service) SearchDriver(ctx context.Context, req models.RideRequestedMessage) error {
 	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
-		Action: "search_driver",
-		RideID: req.RideID.String(),
+		Action:        "search_driver",
+		RideID:        req.RideID.String(),
+		RideNumber:    req.RideNumber,
+		CorrelationID: req.CorrelationID,
 	})
 
 	offer := s.prepareRideOffer(req)
@@ -26,18 +28,18 @@ func (s *Service) SearchDriver(ctx context.Context, req models.RideRequestedMess
 // Формируем оффер один раз
 func (s *Service) prepareRideOffer(req models.RideRequestedMessage) models.RideOffer {
 	distance := s.logic.calculate.Distance(models.Location{
-		Latitude:  req.PickupLocation.Lat,
-		Longitude: req.PickupLocation.Lng,
+		Latitude:  req.PickupLocation.Latitude,
+		Longitude: req.PickupLocation.Longitude,
 	}, models.Location{
-		Latitude:  req.DestinationLocation.Lat,
-		Longitude: req.DestinationLocation.Lng,
+		Latitude:  req.DestinationLocation.Latitude,
+		Longitude: req.DestinationLocation.Longitude,
 	})
 	durationMin := s.logic.calculate.Duration(distance)
 
 	return models.RideOffer{
 		ID:                          uuid.New(),
 		MsgType:                     "ride_offer",
-		RideID:                      uuid.New(),
+		RideID:                      req.RideID,
 		RideNumber:                  req.RideNumber,
 		PickupLocation:              req.PickupLocation,
 		DestinationLocation:         req.DestinationLocation,
@@ -63,17 +65,22 @@ func (s *Service) searchAvailableDrivers(ctx context.Context, rideType string, l
 
 // Отправка оффера водителю и обработка принятия
 func (s *Service) offerRideToDriver(ctx context.Context, correlationID string, driver models.DriverWithDistance, offer models.RideOffer) (bool, error) {
-	offer.DistanceToPickupKm = driver.DistanceKm
-	s.l.Info(ctx, "sending offer to driver", "driver_id", driver.ID, "offer_id", offer.ID)
+	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
+		DriverID: driver.ID.String(),
+		OfferID:  offer.ID.String(),
+	})
 
-	accepted, err := s.infra.sender.SendRideOffer(ctx, driver.ID, offer)
+	s.l.Info(ctx, "sending offer to driver")
+	offer.DistanceToPickupKm = driver.DistanceKm
+
+	accepted, err := s.infra.communicator.SendRideOffer(ctx, driver.ID, offer)
 	if err != nil {
-		s.l.Debug(ctx, "failed to send ride offer", err, "driver_id", driver.ID)
+		s.l.Debug(ctx, "failed to send ride offer", "error", err)
 		return false, nil // игнорируем ошибки отправки для поиска других водителей
 	}
 
 	if !accepted {
-		s.l.Info(ctx, "driver declined or timeout", "driver_id", driver.ID)
+		s.l.Info(ctx, "driver declined or timeout")
 		return false, nil
 	}
 
@@ -81,7 +88,7 @@ func (s *Service) offerRideToDriver(ctx context.Context, correlationID string, d
 	if err := s.infra.trm.Do(ctx, func(ctx context.Context) error {
 		old, err := s.repos.driver.ChangeStatus(ctx, driver.ID, types.StatusDriverBusy)
 		if err != nil {
-			s.l.Error(ctx, "failed to change driver status", err, "driver_id", driver.ID)
+			s.l.Error(ctx, "failed to change driver status", err)
 			return err
 		}
 		if old == types.StatusDriverBusy {
@@ -90,33 +97,29 @@ func (s *Service) offerRideToDriver(ctx context.Context, correlationID string, d
 		}
 
 		// Publish driver response
-		if err := retry(5, 2*time.Second, func() error {
-			return s.infra.publisher.PublishDriverResponse(ctx, models.DriverMatchResponse{
-				RideID:                  offer.RideID,
-				DriverID:                driver.ID,
-				Accepted:                true,
-				EstimatedArrivalMinutes: s.logic.calculate.Duration(driver.DistanceKm),
-				DriverLocation:          driver.Location,
-				CorrelationID:           correlationID,
-				DriverInfo: models.DriverInfo{
-					Name:    driver.Name,
-					Rating:  driver.Rating,
-					Vehicle: driver.Vehicle,
-				},
-			})
+		if err := s.infra.publisher.PublishDriverResponse(ctx, models.DriverMatchResponse{
+			RideID:                  offer.RideID,
+			DriverID:                driver.ID,
+			Accepted:                true,
+			EstimatedArrivalMinutes: s.logic.calculate.Duration(driver.DistanceKm),
+			DriverLocation:          driver.Location,
+			CorrelationID:           correlationID,
+			DriverInfo: models.DriverInfo{
+				Name:    driver.Name,
+				Rating:  driver.Rating,
+				Vehicle: driver.Vehicle,
+			},
 		}); err != nil {
 			s.l.Error(ctx, "failed to publish driver response", err)
 			return err
 		}
 
 		// Publish driver status update
-		if err := retry(5, 2*time.Second, func() error {
-			return s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
-				DriverID:  driver.ID,
-				Status:    types.StatusDriverBusy,
-				RideID:    offer.RideID,
-				Timestamp: time.Now(),
-			})
+		if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
+			DriverID:  driver.ID,
+			Status:    types.StatusDriverBusy,
+			Timestamp: time.Now(),
+			RideID:    &offer.RideID,
 		}); err != nil {
 			s.l.Error(ctx, "failed to publish driver status", err)
 			return err
@@ -126,7 +129,7 @@ func (s *Service) offerRideToDriver(ctx context.Context, correlationID string, d
 		return false, err
 	}
 
-	s.l.Info(ctx, "driver accepted the ride offer", "driver_id", driver.ID)
+	s.l.Info(ctx, "driver accepted the ride offer")
 	return true, nil
 }
 
@@ -139,8 +142,8 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 
 	trySearch := func() (bool, error) {
 		loc := models.Location{
-			Latitude:  req.PickupLocation.Lat,
-			Longitude: req.PickupLocation.Lng,
+			Latitude:  req.PickupLocation.Latitude,
+			Longitude: req.PickupLocation.Longitude,
 			Address:   req.PickupLocation.Address,
 		}
 
@@ -161,7 +164,7 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 	// Первая попытка сразу
 	accepted, err := trySearch()
 	if err != nil {
-		return err
+		return wrap.Error(ctx, err)
 	}
 	if accepted {
 		return nil
@@ -177,9 +180,10 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 			accepted, err := trySearch()
 			if err != nil {
 				if errors.Is(err, types.ErrDriversNotFound) {
-					break
+					s.l.Warn(ctx, "Drivers are not found")
+					continue
 				}
-				return err
+				return wrap.Error(ctx, err)
 			}
 			if accepted {
 				return nil
@@ -189,106 +193,121 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 }
 
 func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpdateMessage) error {
-	ctx = wrap.WithAction(ctx, "match_driver")
+	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
+		Action: "match_driver",
+		RideID: req.RideID.String(),
+	})
 
 	if req.DriverID == nil {
-		s.l.Error(ctx, "driverID is not exist at ride status update request", types.ErrDriverIDNotExist)
 		return wrap.Error(ctx, types.ErrDriverIDNotExist)
 	}
+	ctx = wrap.WithDriverID(ctx, req.DriverID.String())
 
 	// Ride Cancel
-	if req.Status == types.StatusCancelled {
-		if err := s.infra.trm.Do(ctx, func(ctx context.Context) error {
-			if _, err := s.repos.driver.ChangeStatus(ctx, *req.DriverID, types.StatusDriverAvailable); err != nil {
-				s.l.Error(ctx, "failed to change driver status to available after ride cancellation", err, "driver_id", *req.DriverID)
-				return err
-			}
-
-			if err := retry(5, time.Second*2, func() error {
-				return s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
-					DriverID:  *req.DriverID,
-					Status:    types.StatusDriverAvailable,
-					RideID:    req.RideID,
-					Timestamp: time.Now(),
-				})
-			}); err != nil {
-				s.l.Error(ctx, "failed to publish driver status after ride cancellation", err, "driver_id", *req.DriverID)
-				return err
-			}
-
-			return nil
-		}); err != nil {
+	switch req.Status {
+	case types.StatusCancelled:
+		if err := s.cancelRide(ctx, *req.DriverID, req.RideID); err != nil {
 			return wrap.Error(ctx, err)
 		}
-	}
 
-	if req.Status != types.StatusMatched {
-		s.l.Warn(ctx, "unsupported ride status update", "status", req.Status)
-		return nil
-	}
+	case types.StatusMatched:
+		if err := s.processMatchedRide(ctx, *req.DriverID, req.RideID); err != nil {
+			return wrap.Error(ctx, err)
+		}
 
-	if err := s.infra.trm.Do(ctx, func(ctx context.Context) error {
-		// Get Ride ID
-		details, err := s.repos.ride.GetDetails(ctx, req.RideID)
+		finalDest, err := s.repos.ride.GetPickupCoordinate(ctx, req.RideID)
 		if err != nil {
-			s.l.Error(ctx, "failed to get ride", err, "ride_id", req.RideID)
-			return err
+			return wrap.Error(ctx, err)
 		}
 
-		if _, err := s.repos.driver.ChangeStatus(ctx, details.RideID, types.StatusDriverEnRoute); err != nil {
-			s.l.Error(ctx, "failed to change driver status", err, "driver_id", details.DriverID)
-			return err
+		// Track him in a real time
+		ctx, cancel := context.WithCancel(ctx)
+		if err := s.infra.communicator.ListenLocationUpdates(ctx, *req.DriverID, req.RideID,
+			func(ctx context.Context, current models.RideLocationUpdate) error {
+				return s.processDriverLocation(ctx, cancel, current, *finalDest)
+			}); err != nil {
+			return wrap.Error(ctx, err)
 		}
 
-		// Send ride details(pickup location, navigation)
-		if err := s.infra.sender.SendRideDetails(ctx, *details); err != nil {
-			s.l.Error(ctx, "failed to send ride details", err, "driver_id", details.DriverID)
-			return err
-		}
-
-		if err := retry(5, time.Second*2, func() error {
-			return s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
-				DriverID:  *req.DriverID,
-				Status:    types.StatusDriverEnRoute,
-				RideID:    details.RideID,
-				Timestamp: time.Now(),
-			})
-		}); err != nil {
-			s.l.Error(ctx, "failed to publish driver status", err, "driver_id", details.DriverID)
-			return err
-		}
-
-		return nil
-	}); err != nil {
-		return wrap.Error(ctx, err)
+	default:
+		s.l.Warn(ctx, "unsupported ride status update", "status", req.Status)
 	}
-
-	// Track him in a real time
-	go s.ListenUpdates(ctx, *req.DriverID)
 	return nil
 }
 
-func (s *Service) ListenUpdates(ctx context.Context, driverID uuid.UUID) {
-	// Open message receiver
-	// Dont forget about graceful shutdown
-	// Also listen driver status, if he is available, return function
+func (s *Service) cancelRide(ctx context.Context, driverID, rideID uuid.UUID) error {
+	return s.infra.trm.Do(ctx, func(ctx context.Context) error {
+		if _, err := s.repos.driver.ChangeStatus(ctx, driverID, types.StatusDriverAvailable); err != nil {
+			return fmt.Errorf("failed to change driver status to available after ride cancellation: %w", err)
+		}
 
-	// Handle messages by type:
-	/*
-		// Simple example:
-			switch msg{
-				case UpdateMsg:
-					// Driver must send coordinates every 3-5 seconds(problem at client side)
+		if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
+			DriverID:  driverID,
+			Status:    types.StatusDriverAvailable,
+			Timestamp: time.Now(),
+			RideID:    &rideID,
+		}); err != nil {
+			return fmt.Errorf("failed to publish driver status after ride cancellation: %w", err)
+		}
+		return nil
+	})
+}
 
-					// Receive location data
-					// Update coordinates in database
+func (s *Service) processMatchedRide(ctx context.Context, driverID, rideID uuid.UUID) error {
+	return s.infra.trm.Do(ctx, func(ctx context.Context) error {
+		// Get Ride ID
+		details, err := s.repos.ride.GetDetails(ctx, rideID)
+		if err != nil {
+			return fmt.Errorf("failed to get ride: %w", err)
+		}
 
-					// Publish to location_fanout
-				case ArriveMsg:
-					// Receive arrive msg
-					// Publish status change
-					return
-			}
-	*/
+		if _, err := s.repos.driver.ChangeStatus(ctx, details.DriverID, types.StatusDriverEnRoute); err != nil {
+			return fmt.Errorf("failed to change driver status: %w", err)
+		}
 
+		// Send ride details(pickup location, navigation)
+		if err := s.infra.communicator.SendRideDetails(ctx, *details); err != nil {
+			return fmt.Errorf("failed to send ride details: %w", err)
+		}
+
+		if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
+			DriverID:  driverID,
+			Status:    types.StatusDriverEnRoute,
+			Timestamp: time.Now(),
+			RideID:    &details.RideID,
+		}); err != nil {
+			return fmt.Errorf("failed to publish driver status: %w", err)
+		}
+
+		return nil
+	})
+}
+
+func (s *Service) processDriverLocation(ctx context.Context, cancel context.CancelFunc, current models.RideLocationUpdate, destination models.Location) error {
+	if _, err := s.UpdateLocation(ctx, current); err != nil {
+		return err
+	}
+
+	if !s.logic.calculate.IsDriverArrived(current.Location.Latitude, current.Location.Longitude, destination.Latitude, destination.Longitude) {
+		return nil
+	}
+
+	return s.infra.trm.Do(ctx, func(ctx context.Context) error {
+		if _, err := s.repos.driver.ChangeStatus(ctx, current.DriverID, types.StatusArrived); err != nil {
+			return fmt.Errorf("failed to change driver status: %w", err)
+		}
+
+		if err := s.infra.publisher.PublishDriverStatus(
+			ctx,
+			models.DriverStatusUpdateMessage{
+				DriverID:  current.DriverID,
+				Status:    types.StatusArrived,
+				Timestamp: time.Now(),
+				RideID:    current.RideID,
+			}); err != nil {
+			return fmt.Errorf("failed to publish driver status: %w", err)
+		}
+		cancel()
+		return nil
+	})
 }

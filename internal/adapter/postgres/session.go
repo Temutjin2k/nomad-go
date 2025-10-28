@@ -57,3 +57,26 @@ func (r *SessionRepo) GetSummary(ctx context.Context, driverID uuid.UUID) (model
 
 	return summary, nil
 }
+
+func (r *SessionRepo) Update(ctx context.Context, driverID uuid.UUID, ridesCompleted int, earnings float64) error {
+	const op = "SessionRepo.Update"
+	query := `
+		UPDATE driver_sessions
+		SET 
+			total_rides = total_rides + $1,
+			total_earnings = total_earnings + $2
+		WHERE 
+			driver_id = $3`
+
+	res, err := TxorDB(ctx, r.db).Exec(ctx, query, ridesCompleted, earnings, driverID)
+	if err != nil {
+		ctx = wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed)
+		return wrap.Error(ctx, fmt.Errorf("%s: %w", op, err))
+	}
+
+	if res.RowsAffected() == 0 {
+		return types.ErrSessionNotFound
+	}
+
+	return nil
+}

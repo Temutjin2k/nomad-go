@@ -8,7 +8,8 @@ values
     ('OFFLINE'),      -- Driver is not accepting rides
     ('AVAILABLE'),    -- Driver is available to accept rides
     ('BUSY'),         -- Driver is currently occupied
-    ('EN_ROUTE')      -- Driver is on the way to pickup
+    ('EN_ROUTE'),     -- Driver is on the way to pickup
+    ('ARRIVED')       -- Driver has arrived at pickup location
 ;
 
 -- Main drivers table

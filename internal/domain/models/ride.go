@@ -35,12 +35,6 @@ type RideEvent struct {
 
 /* ======================= service ======================= */
 
-type Location struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	Address   string  `json:"address,omitempty"`
-}
-
 type Ride struct {
 	ID          uuid.UUID
 	RideNumber  string
@@ -70,35 +64,21 @@ type Ride struct {
 	StartedAt   *time.Time
 	CompletedAt *time.Time
 	CancelledAt *time.Time
-
-	Details RideDetails
-}
-
-type RideDetails struct {
-	RideID   uuid.UUID `json:"ride_id"`
-	DriverID uuid.UUID `json:"driver_id"`
-	Passenger
 }
 
 /* ======================= rabbitmq ======================= */
 
-type LocationMessage struct {
-	Lat     float64 `json:"lat"`
-	Lng     float64 `json:"lng"`
-	Address string  `json:"address,omitempty"`
-}
-
 type RideRequestedMessage struct {
-	RideID              uuid.UUID       `json:"ride_id"`
-	RideNumber          string          `json:"ride_number"`
-	PickupLocation      LocationMessage `json:"pickup_location"`
-	DestinationLocation LocationMessage `json:"destination_location"`
-	RideType            string          `json:"ride_type"`
-	EstimatedFare       float64         `json:"estimated_fare"`
-	MaxDistanceKm       float64         `json:"max_distance_km"`
-	TimeoutSeconds      int             `json:"timeout_seconds"`
-	CorrelationID       string          `json:"correlation_id"`
-	Priority            uint8           `json:"priority"`
+	RideID              uuid.UUID `json:"ride_id"`
+	RideNumber          string    `json:"ride_number"`
+	PickupLocation      Location  `json:"pickup_location"`
+	DestinationLocation Location  `json:"destination_location"`
+	RideType            string    `json:"ride_type"`
+	EstimatedFare       float64   `json:"estimated_fare"`
+	MaxDistanceKm       float64   `json:"max_distance_km"`
+	TimeoutSeconds      int       `json:"timeout_seconds"`
+	CorrelationID       string    `json:"correlation_id"`
+	Priority            uint8     `json:"priority"`
 }
 
 type RideStatusUpdateMessage struct {
@@ -113,23 +93,30 @@ type RideStatusUpdateMessage struct {
 /* ======================= Websocket ======================= */
 
 type RideOffer struct {
-	ID                          uuid.UUID       `json:"offer_id"`
-	MsgType                     string          `json:"type"` // By default must be: "ride_offer"
-	RideID                      uuid.UUID       `json:"ride_id"`
-	RideNumber                  string          `json:"ride_number"`
-	PickupLocation              LocationMessage `json:"pickup_location"`
-	DestinationLocation         LocationMessage `json:"destination_location"`
-	EstimatedFare               float64         `json:"estimated_fare"`
-	DriverEarnings              float64         `json:"driver_earnings"`
-	DistanceToPickupKm          float64         `json:"distance_to_pickup_km"`
-	EstimatedRideDurationMinute int             `json:"estimated_ride_duration_minutes"`
-	ExpiresAt                   time.Time       `json:"expires_at"`
+	MsgType                     string    `json:"type"` // By default must be: "ride_offer"
+	ID                          uuid.UUID `json:"offer_id"`
+	RideID                      uuid.UUID `json:"ride_id"`
+	RideNumber                  string    `json:"ride_number"`
+	PickupLocation              Location  `json:"pickup_location"`
+	DestinationLocation         Location  `json:"destination_location"`
+	EstimatedFare               float64   `json:"estimated_fare"`
+	DriverEarnings              float64   `json:"driver_earnings"`
+	DistanceToPickupKm          float64   `json:"distance_to_pickup_km"`
+	EstimatedRideDurationMinute int       `json:"estimated_ride_duration_minutes"`
+	ExpiresAt                   time.Time `json:"expires_at"`
 }
 
 type RideOfferResponse struct {
-	ID              uuid.UUID       `json:"offer_id"`
-	MsgType         string          `json:"type"` // By default must be: "ride_offer"
-	RideID          uuid.UUID       `json:"ride_id"`
-	Accepted        bool            `json:"accepted"`
-	CurrentLocation LocationMessage `json:"current_location"`
+	MsgType         string    `json:"type"` // By default must be: "ride_offer"
+	ID              uuid.UUID `json:"offer_id"`
+	RideID          uuid.UUID `json:"ride_id"`
+	Accepted        bool      `json:"accepted"`
+	CurrentLocation Location  `json:"current_location"`
+}
+
+type RideDetails struct {
+	MsgType  string    `json:"type"` // // By default must be: "ride_details"
+	RideID   uuid.UUID `json:"ride_id"`
+	DriverID uuid.UUID `json:"driver_id"`
+	Passenger
 }

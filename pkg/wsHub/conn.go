@@ -16,8 +16,6 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 )
 
-var ErrListenTimeout = errors.New("listen timeout")
-
 // Conn представляет собой одно соединение WebSocket, связанное с сущностью (например, драйвером)
 type Conn struct {
 	conn        *websocket.Conn
