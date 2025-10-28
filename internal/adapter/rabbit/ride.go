@@ -179,9 +179,9 @@ func (r *RideMsgBroker) ConsumeDriverStatusUpdate(ctx context.Context, handler D
 					}
 
 					// добавляем в контекст переменные для логирования и трассировки
-					ctx = wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), d.CorrelationId)
+					ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), d.CorrelationId)
 
-					if err := handler(ctx, req); err != nil {
+					if err := handler(ctxx, req); err != nil {
 						r.l.Error(wrap.ErrorCtx(ctx, err), "failed to handle driver response", err)
 
 						// если ошибка восстановимая, повторно помещаем в очередь
@@ -251,9 +251,9 @@ func (r *RideMsgBroker) ConsumeDriverResponse(ctx context.Context, rideID uuid.U
 					}
 
 					// добавляем в контекст переменные для логирования и трассировки
-					ctx = wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), d.CorrelationId)
+					ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), d.CorrelationId)
 
-					if err := handler(ctx, req); err != nil {
+					if err := handler(ctxx, req); err != nil {
 						r.l.Error(wrap.ErrorCtx(ctx, err), "failed to handle driver response", err)
 
 						// если ошибка восстановимая, повторно помещаем в очередь
@@ -324,9 +324,9 @@ func (r *RideMsgBroker) ConsumeDriverLocationUpdate(ctx context.Context, handler
 						return
 					}
 
-					ctx = wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), d.CorrelationId)
+					ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), d.CorrelationId)
 
-					if err := handler(ctx, req); err != nil {
+					if err := handler(ctxx, req); err != nil {
 						r.l.Error(wrap.ErrorCtx(ctx, err), "failed to handle driver location update", err)
 						if isRecoverableError(err) {
 							_ = d.Nack(false, true) // requeue

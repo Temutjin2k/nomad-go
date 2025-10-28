@@ -52,8 +52,10 @@ func (r *RideConsumer) handleMessage(ctx context.Context, fn ConsumeRideHandlerF
 		return
 	}
 
+	ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideType), msg.CorrelationId)
+
 	// Вызываем бизнес-обработчик
-	if err := fn(ctx, req); err != nil {
+	if err := fn(ctxx, req); err != nil {
 		r.l.Error(ctx, "handler failed", err, "op", op)
 
 		// Если водителей нет — это не ошибка, просто игнор
@@ -203,8 +205,10 @@ func (r *RideConsumer) ConsumeStatusUpdate(ctx context.Context, fn MatchConfHand
 						return
 					}
 
+					ctxx := wrap.WithRequestID(wrap.WithRideID(wrap.WithDriverID(ctx, req.DriverID.String()), req.RideID.String()), msg.CorrelationId)
+
 					// Вызов обработчика
-					if err := fn(ctx, req); err != nil {
+					if err := fn(ctxx, req); err != nil {
 						r.l.Error(ctx, "handler failed", err, "op", op)
 						_ = msg.Nack(false, false)
 						return
