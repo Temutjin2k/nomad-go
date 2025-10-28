@@ -66,6 +66,13 @@ func (h *Admin) GetActiveRides(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	filters.Validate(v)
+
+	if !v.Valid() {
+		failedValidationResponse(w, v.Errors)
+		return
+	}
+
 	rides, err := h.s.ActiveRides(ctx, filters)
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to get active rides", err)

@@ -149,7 +149,7 @@ func (r *DriverBroker) ConsumeRideRequest(ctx context.Context, fn ConsumeRideHan
 					continue consumeLoop
 				}
 
-				go r.handleMessage(ctx, fn, msg)
+				go r.handleRideRequested(ctx, fn, msg)
 			}
 		}
 	}
@@ -158,11 +158,11 @@ func (r *DriverBroker) ConsumeRideRequest(ctx context.Context, fn ConsumeRideHan
 type MatchConfHandlerFunc func(ctx context.Context, req models.RideStatusUpdateMessage) error
 
 func (r *DriverBroker) ConsumeStatusUpdate(ctx context.Context, fn MatchConfHandlerFunc) error {
-	const op = "RideConsumer.ConsumeMatchConfirmation"
+	const op = "RideConsumer.ConsumeStatusUpdate"
 
 	for {
 		if ctx.Err() != nil {
-			r.l.Debug(ctx, "consume match confirmation stopped by context")
+			r.l.Debug(ctx, "consume status update stopped by context")
 			return nil
 		}
 
@@ -224,12 +224,12 @@ func (r *DriverBroker) ConsumeStatusUpdate(ctx context.Context, fn MatchConfHand
 	}
 }
 
-func (r *DriverBroker) handleMessage(ctx context.Context, fn ConsumeRideHandlerFunc, msg amqp.Delivery) {
-	const op = "RideConsumer.handleMessage"
+func (r *DriverBroker) handleRideRequested(ctx context.Context, fn ConsumeRideHandlerFunc, msg amqp.Delivery) {
+	ctx = wrap.WithAction(ctx, "rabbitmq_handle_ride_requested")
 
 	var req models.RideRequestedMessage
 	if err := json.Unmarshal(msg.Body, &req); err != nil {
-		r.l.Error(ctx, "decode failed", err, "op", op)
+		r.l.Error(ctx, "decode failed", err)
 		_ = msg.Nack(false, false)
 		return
 	}
@@ -238,7 +238,7 @@ func (r *DriverBroker) handleMessage(ctx context.Context, fn ConsumeRideHandlerF
 
 	// Вызываем бизнес-обработчик
 	if err := fn(ctxx, req); err != nil {
-		r.l.Error(ctx, "handler failed", err, "op", op)
+		r.l.Error(ctx, "handler failed", err)
 
 		// Если водителей нет — это не ошибка, просто игнор
 		if errors.Is(err, types.ErrDriversNotFound) || errors.Is(err, types.ErrDriverSearchTimeout) {
@@ -253,6 +253,6 @@ func (r *DriverBroker) handleMessage(ctx context.Context, fn ConsumeRideHandlerF
 
 	// Успешно обработано
 	if err := msg.Ack(false); err != nil {
-		r.l.Warn(ctx, "ack failed", err, "op", op)
+		r.l.Warn(ctx, "ack failed", err)
 	}
 }

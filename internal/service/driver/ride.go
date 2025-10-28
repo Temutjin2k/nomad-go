@@ -13,14 +13,15 @@ import (
 )
 
 func (s *Service) SearchDriver(ctx context.Context, req models.RideRequestedMessage) error {
+	offer := s.prepareRideOffer(req)
+
 	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
 		Action:     "search_driver",
 		RideID:     req.RideID.String(),
 		RideNumber: req.RideNumber,
 		RequestID:  wrap.GetRequestID(ctx),
+		OfferID:    offer.ID.String(),
 	})
-
-	offer := s.prepareRideOffer(req)
 
 	return s.waitForDriverAcceptance(ctx, req, offer)
 }
@@ -135,8 +136,8 @@ func (s *Service) offerRideToDriver(ctx context.Context, correlationID string, d
 
 // Основной цикл поиска водителя с тикером и таймером
 func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRequestedMessage, offer models.RideOffer) error {
-	timer := time.NewTimer(time.Hour * 24)
-	tick := time.NewTicker(5 * time.Second)
+	timer := time.NewTimer(time.Minute * 2) // время поиска водителя
+	tick := time.NewTicker(5 * time.Second) // частота поиска водителя
 	defer timer.Stop()
 	defer tick.Stop()
 
@@ -174,9 +175,9 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("driver search stop: (ctx Done)")
-		case <-timer.C:
+		case <-timer.C: // время поиска водителя
 			return types.ErrDriverSearchTimeout
-		case <-tick.C:
+		case <-tick.C: // частота поиска водителя
 			accepted, err := trySearch()
 			if err != nil {
 				if errors.Is(err, types.ErrDriversNotFound) {
@@ -192,16 +193,22 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 	}
 }
 
+// HandleRideStatus обрабатывает статусы поездки
 func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpdateMessage) error {
 	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
 		Action: "match_driver",
 		RideID: req.RideID.String(),
 	})
 
+	// if driverID not provided search from database
 	if req.DriverID == nil {
-		return wrap.Error(ctx, types.ErrDriverIDNotExist)
+		ride, err := s.repos.ride.Get(ctx, req.RideID)
+		if err != nil {
+			return wrap.Error(ctx, err)
+		}
+
+		req.DriverID = ride.DriverID
 	}
-	ctx = wrap.WithDriverID(ctx, req.DriverID.String())
 
 	switch req.Status {
 	case types.StatusCancelled.String():

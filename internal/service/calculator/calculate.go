@@ -121,6 +121,9 @@ func (c *CalculatorImpl) Priority(ride *models.Ride) int {
 		priority += 2
 	}
 
+	if minutes := c.Duration(c.Distance(ride.Pickup, ride.Destination)); minutes < 15 {
+		priority += 3
+	}
 	// Правило №3 (на будущее): Статус пассажира
 	// Если бы у нас была система ролей с подписками по типу VIP, VIP++, SSS ранг, то давали бы доп приоритет
 

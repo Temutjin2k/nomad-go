@@ -127,3 +127,10 @@ func GetRequestID(ctx context.Context) string {
 	}
 	return ""
 }
+
+func GetLogCtx(ctx context.Context) LogCtx {
+	if lc, ok := ctx.Value(LogCtxKey).(LogCtx); ok {
+		return lc
+	}
+	return LogCtx{}
+}

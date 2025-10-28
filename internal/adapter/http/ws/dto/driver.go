@@ -17,7 +17,7 @@ type OfferResp struct {
 func (r *OfferResp) Validate(v *validator.Validator) {
 	v.Check(r.ID != uuid.NilUUID, "offer_id", "must be provided")
 	v.Check(r.RideID != uuid.NilUUID, "ride_id", "must be provided")
-	v.Check(r.MsgType != "ride_response", "type", "must be: ride_response type")
+	v.Check(r.MsgType == "ride_response", "type", "must be: ride_response type")
 	r.CurrentLocation.Validate(v)
 }
 

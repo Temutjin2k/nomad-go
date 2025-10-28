@@ -129,8 +129,6 @@ func (c *Conn) sendPing() error {
 
 // Listen читает сообщения и рассылает подписчикам
 func (c *Conn) Listen() error {
-	c.l.Debug(c.ctx, "start listening", "entity_ID", c.entityID)
-
 mainLoop:
 	for {
 		select {
@@ -170,7 +168,6 @@ mainLoop:
 					case <-time.After(100 * time.Millisecond):
 						c.l.Warn(c.ctx, "broadcast timeout, dropping message", "entity_ID", c.entityID, "subscription", name)
 					case <-c.ctx.Done():
-						c.l.Debug(c.ctx, "listen stopped (context cancelled)", "entity_ID", c.entityID)
 						return
 					}
 				}(name, ch, msg)
@@ -199,8 +196,6 @@ func (c *Conn) Close() error {
 	c.once.Do(func() {
 		c.mu.Lock()
 		defer c.mu.Unlock()
-
-		c.l.Debug(c.ctx, "closing connection", "entity_ID", c.entityID)
 
 		if c.cancel != nil {
 			c.cancel()

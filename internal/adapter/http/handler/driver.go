@@ -393,33 +393,44 @@ func (h *Driver) HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Authenticate the WebSocket connection
-	_, err = h.wsAuthenticate(ctx, wsConn, driverID)
+	driver, err := h.wsAuthenticate(ctx, wsConn, driverID)
 	if err != nil {
 		h.l.Error(ctx, "websocket authentication failed", err)
 		return
 	}
+	ctx = wrap.WithDriverID(ctx, driver.ID.String())
+	if driver.Role != types.RoleDriver.String() {
+		h.l.Warn(wrap.WithUserID(ctx, driver.ID.String()), "attempt to start websocket with invalid role(must be driver)", "role", driver.Role)
+		_ = wsConn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "access denied: invalid role"),
+			time.Now().Add(time.Second),
+		)
+		_ = wsConn.Close()
+		return
+	}
 
-	conn := wshub.NewConn(ctx, driverID, wsConn, h.l)
+	conn := wshub.NewConn(ctx, driver.ID, wsConn, h.l)
 	if err := h.wsConnections.Add(conn); err != nil {
-		h.l.Error(ctx, "failed to register WS connection", err, "driver_id", driverID)
+		h.l.Error(ctx, "failed to register WS connection", err)
 		wsConn.WriteJSON(map[string]any{"error": "failed to register"})
 		wsConn.Close()
 		return
 	}
-	defer h.wsConnections.Delete(driverID)
+	defer h.wsConnections.Delete(driver.ID)
 
-	h.l.Info(ctx, "websocket connection registered", "driver_id", driverID)
+	h.l.Info(ctx, "websocket connection registered")
 
 	// Heartbeat
 	go func() {
 		if err := conn.HeartbeatLoop(time.Second*60, time.Second*30); err != nil {
-			h.l.Error(ctx, "heartbeat loop failed", err, "driver_id", driverID)
+			h.l.Error(ctx, "heartbeat loop failed", err)
 		}
 	}()
 
 	// Listen for messages
 	if err := conn.Listen(); err != nil {
-		h.l.Error(ctx, "websocket listen failed", err, "driver_id", driverID)
+		h.l.Error(ctx, "websocket listen failed", err)
 		_ = wsConn.WriteControl(
 			websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "websocket listen failed"),

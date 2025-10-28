@@ -61,21 +61,27 @@ func (r *RideBroker) PublishRideRequested(ctx context.Context, msg models.RideRe
 	// ключ маршрутизации, example, "ride.request.ECONOMY"
 	key := fmt.Sprintf("ride.request.%s", msg.RideType)
 
-	if err := r.client.Channel.PublishWithContext(
-		ctx,
-		r.RideExchange, // exchange
-		key,            // routing key
-		true,           // mandatory
-		false,          // immediate
-		amqp091.Publishing{
-			ContentType:   "application/json",
-			CorrelationId: msg.CorrelationID, // для трассировки
-			Body:          body,
-			Timestamp:     time.Now(),
-			Priority:      msg.Priority,
-		},
-	); err != nil {
-		return wrap.Error(ctx, fmt.Errorf("failed to publish with context: %w", err))
+	if err := retry(5, time.Second, func() error {
+		if err := r.client.Channel.PublishWithContext(
+			ctx,
+			r.RideExchange, // exchange
+			key,            // routing key
+			true,           // mandatory
+			false,          // immediate
+			amqp091.Publishing{
+				ContentType:   "application/json",
+				CorrelationId: msg.CorrelationID, // для трассировки
+				Body:          body,
+				Timestamp:     time.Now(),
+				Priority:      msg.Priority,
+			},
+		); err != nil {
+			return wrap.Error(ctx, fmt.Errorf("failed to publish with context: %w", err))
+		}
+
+		return nil
+	}); err != nil {
+		return wrap.Error(ctx, err)
 	}
 
 	return nil
@@ -99,20 +105,26 @@ func (r *RideBroker) PublishRideStatus(ctx context.Context, msg models.RideStatu
 
 	key := fmt.Sprintf("ride.status.%s", msg.Status)
 
-	if err := r.client.Channel.PublishWithContext(
-		ctx,
-		r.RideExchange, // exchange
-		key,            // routing key
-		false,          // mandatory
-		false,          // immediate
-		amqp091.Publishing{
-			ContentType:   "application/json",
-			CorrelationId: msg.CorrelationID,
-			Body:          body,
-			Timestamp:     time.Now(),
-		},
-	); err != nil {
-		return wrap.Error(ctx, fmt.Errorf("failed to publish with context: %w", err))
+	if err := retry(5, time.Second, func() error {
+		if err := r.client.Channel.PublishWithContext(
+			ctx,
+			r.RideExchange, // exchange
+			key,            // routing key
+			false,          // mandatory
+			false,          // immediate
+			amqp091.Publishing{
+				ContentType:   "application/json",
+				CorrelationId: msg.CorrelationID,
+				Body:          body,
+				Timestamp:     time.Now(),
+			},
+		); err != nil {
+			return fmt.Errorf("failed to publish with context: %w", err)
+		}
+
+		return nil
+	}); err != nil {
+		return wrap.Error(ctx, err)
 	}
 
 	return nil
@@ -249,7 +261,6 @@ func (r *RideBroker) ConsumeDriverResponse(ctx context.Context, targetRideID uui
 
 				// добавляем в контекст переменные для логирования и трассировки
 				ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), msg.CorrelationId)
-				
 
 				if err := handler(ctxx, req); err != nil {
 					r.l.Error(wrap.ErrorCtx(ctx, err), "failed to handle driver response", err)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler/dto"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
+	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
@@ -167,6 +168,17 @@ func (h *Ride) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	passenger, err := h.wsAuthenticate(ctx, wsConn, passengerID)
 	if err != nil {
 		h.l.Error(ctx, "websocket authentication failed", err)
+		return
+	}
+
+	if passenger.Role != types.RolePassenger.String() {
+		h.l.Warn(wrap.WithUserID(ctx, passenger.ID.String()), "attempt to start websocket with invalid role(must be passenger)", "role", passenger.Role)
+		_ = wsConn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "access denied: invalid role"),
+			time.Now().Add(time.Second),
+		)
+		_ = wsConn.Close()
 		return
 	}
 

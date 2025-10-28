@@ -42,7 +42,7 @@ func NewRideService(repo RideRepo, calculate ridecalc.Calculator, trm trm.TxMana
 }
 
 func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ride, error) {
-	ctx = wrap.WithAction(ctx, "create_ride")
+	ctx = wrap.WithAction(wrap.WithPassengerID(ctx, ride.PassengerID.String()), "create_ride")
 
 	// go s.startRideTimeout(ctx, ride.ID, ride.PassengerID)
 
@@ -112,15 +112,6 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 			return wrap.Error(ctx, fmt.Errorf("failed to publish ride requested event: %w", err))
 		}
 
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
-			defer cancel()
-			// Start a goroutine to handle the driver's response
-			if err := s.publisher.ConsumeDriverResponse(ctx, createdRide.ID, s.HandleDriverResponse); err != nil {
-				s.logger.Error(ctx, "failed to consume driver response", err)
-			}
-		}()
-
 		msg = message
 		return nil
 	})
@@ -136,15 +127,42 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 
 	s.logger.Info(ctx, "ride created successfully", "ride_id", createdRide.ID)
 
+	// Wait for driver response for 2 minutes
+	go func() {
+		ctx, cancel := context.WithTimeout(wrap.WithLogCtx(context.Background(), wrap.GetLogCtx(ctx)), time.Minute*2)
+		defer cancel()
+		// Start a goroutine to handle the driver's response
+		if err := s.publisher.ConsumeDriverResponse(ctx, createdRide.ID, s.HandleDriverResponse); err != nil {
+			s.logger.Error(ctx, "failed to consume driver response", err)
+
+			// cancel the ride
+			_, err := s.Cancel(ctx, createdRide.ID, "failed to find a driver")
+			if err != nil {
+				s.logger.Error(ctx, "failed to cancel ride", err)
+			}
+
+			data := models.StatusUpdateWebSocketMessage{
+				EventType: types.EventRideCancelled,
+				Data:      msg,
+			}
+
+			// notify via websocket
+			if err := s.passengerSender.SendToPassenger(ctx, createdRide.PassengerID, data); err != nil {
+				s.logger.Error(ctx, "failed to notify passenger about ride cancelation", err)
+			}
+		}
+	}()
+
 	return createdRide, nil
 }
 
+// Cancel cancels a ride
 func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason string) (*models.Ride, error) {
 	ctx = wrap.WithAction(wrap.WithRideID(ctx, rideID.String()), "cancel_ride")
 
 	var cancelledRide *models.Ride
 	var msg models.RideStatusUpdateMessage
-	err := s.trm.Do(ctx, func(ctx context.Context) error {
+	if err := s.trm.Do(ctx, func(ctx context.Context) error {
 		ride, err := s.repo.Get(ctx, rideID)
 		if err != nil {
 			if errors.Is(err, types.ErrNotFound) {
@@ -157,6 +175,8 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 			return types.ErrRideCannotBeCancelled
 		}
 
+		s.logger.Warn(ctx, "trying to cancel ride...", "current_status", ride.Status)
+
 		now := time.Now()
 		ride.Status = types.StatusCancelled.String()
 		ride.CancellationReason = &reason
@@ -167,25 +187,22 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 			return fmt.Errorf("could not update ride: %w", err)
 		}
 
-		message := models.RideStatusUpdateMessage{
-			RideID:        ride.ID,
-			Status:        ride.Status,
-			Timestamp:     *ride.CancelledAt,
-			DriverID:      ride.DriverID,
-			CorrelationID: ride.RideNumber,
-		}
-
-		if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
-			return fmt.Errorf("failed to publish ride cancelled event: %w", err)
-		}
-
 		cancelledRide = ride
-		msg = message
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
 		return nil, wrap.Error(ctx, err)
+	}
+
+	message := models.RideStatusUpdateMessage{
+		RideID:        cancelledRide.ID,
+		Status:        cancelledRide.Status,
+		Timestamp:     *cancelledRide.CancelledAt,
+		DriverID:      cancelledRide.DriverID,
+		CorrelationID: cancelledRide.RideNumber,
+	}
+
+	if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
+		s.logger.Warn(ctx, "failed to publish ride cancelled event", "error", err)
 	}
 
 	eventData, _ := json.Marshal(msg) // non fatal event so just ignore error
@@ -198,7 +215,6 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 	return cancelledRide, nil
 }
 
-
 func newCorrelationID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -207,4 +223,3 @@ func newCorrelationID() string {
 	}
 	return hex.EncodeToString(b)
 }
-

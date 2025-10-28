@@ -36,22 +36,13 @@ func (s *RideService) HandleDriverResponse(ctx context.Context, msg models.Drive
 		}
 
 		if ride.Status != types.StatusRequested.String() {
-			s.logger.Warn(ctx, "status already changed, skipping", "current_status", ride.Status)
+			s.logger.Warn(ctx, "status already changed", "current_status", ride.Status)
 			return types.ErrInvalidRideStatus
 		}
 
-		// if err := s.repo.Update(ctx, ride); err != nil {
-		// 	return err
-		// }w
-
-		if err := s.repo.UpdateStatus(ctx, msg.RideID, types.StatusMatched); err != nil {
-			return err
+		if err := s.repo.DriverMatchedForRide(ctx, ride.ID, msg.DriverID, ride.EstimatedFare); err != nil {
+			return fmt.Errorf("failed to update ride status: %w", err)
 		}
-
-		if err := s.repo.UpdateMatchedAt(ctx, msg.RideID); err != nil {
-			return err
-		}
-
 		ride.Status = types.StatusMatched.String()
 		ride.DriverID = &msg.DriverID
 

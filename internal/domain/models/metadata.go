@@ -2,6 +2,7 @@ package models
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 
@@ -41,7 +42,7 @@ func (f Filters) Validate(v *validator.Validator) {
 	v.Check(f.PageSize > 0, "page_size", "must be greater than zero")
 	v.Check(f.PageSize <= 100, "page_size", "must be a maximum of 100")
 	// Check that the sort parameter matches a value in the safelist.
-	v.Check(validator.PermittedValue(f.Sort, f.SortSafelist...), "sort", "invalid sort value")
+	v.Check(validator.PermittedValue(f.Sort, f.SortSafelist...), "sort", fmt.Sprintf("invalid sort value, available: %s", strings.Join(f.SortSafelist, ",")))
 }
 
 // Check that the client-provided Sort field matches one of the entries in our safelist

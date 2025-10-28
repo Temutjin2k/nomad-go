@@ -480,6 +480,12 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 		return 0, wrap.Error(ctx, err)
 	}
 
+	// записываем ивент
+	eventData, _ := json.Marshal(data) // non fatal event so just ignore error
+	if err := s.repos.eventRepo.CreateEvent(ctx, rideID, types.EventFareAdjusted, eventData); err != nil {
+		s.l.Warn(ctx, "failed to create ride event", "event_type", types.EventFareAdjusted, "error", err.Error())
+	}
+
 	return earnings, nil
 }
 
