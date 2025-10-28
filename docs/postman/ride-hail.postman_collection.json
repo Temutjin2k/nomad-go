@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "dc5e33e6-8bb1-4b73-acf4-ab3169980d39",
-		"name": "Ride Hail API",
+		"name": "ride-hail",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "38774679"
 	},
@@ -16,7 +16,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n    \"id\":\"3a0fc3ed-4c04-4ba0-a690-b7c09b8236f2\",\r\n    \"license_number\":\"AA3123123\",\r\n    \"name\":\"Bacoonti\",\r\n    \"vehicle\": {\r\n        \"color\": \"black\",\r\n        \"make\": \"Chevrolet\",\r\n        \"model\": \"Cobalt\",\r\n        \"plate\": \"340PQA01\",\r\n        \"year\": 2015\r\n    }\r\n}",
+							"raw": "{\r\n    \"id\":\"7219c9e7-25c4-477b-9ac3-3ddbbece3033\",\r\n    \"license_number\":\"AA3123123\",\r\n    \"name\":\"Bacoonti\",\r\n    \"vehicle\": {\r\n        \"color\": \"black\",\r\n        \"make\": \"Chevrolet\",\r\n        \"model\": \"Cobalt\",\r\n        \"plate\": \"340PQA01\",\r\n        \"year\": 2015\r\n    }\r\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -80,6 +80,35 @@
 								"drivers",
 								"{{driver_id}}",
 								"offline"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Driver update location",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "localhost:3001/drivers/{{driver_id}}/location",
+							"host": [
+								"localhost"
+							],
+							"port": "3001",
+							"path": [
+								"drivers",
+								"{{driver_id}}",
+								"location"
 							]
 						}
 					},
@@ -150,7 +179,7 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n    \"name\":\"Baconti\",\r\n    \"email\":\"beka1234@gmail.com\",\r\n    \"password\":\"supersecret\"\r\n}\r\n",
+							"raw": "{\r\n    \"name\":\"user\",\r\n    \"email\":\"user1@user.com\",\r\n    \"password\":\"password\"\r\n}\r\n",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -178,7 +207,12 @@
 						"header": [],
 						"body": {
 							"mode": "raw",
-							"raw": "{\r\n    \"id\":\"3a0fc3ed-4c04-4ba0-a690-b7c09b8236f2\",\r\n    \"license_number\":\"AA3123123\",\r\n    \"name\":\"Bacoonti\",\r\n    \"vehicle\": {\r\n        \"color\": \"black\",\r\n        \"make\": \"Chevrolet\",\r\n        \"model\": \"Cobalt\",\r\n        \"plate\": \"340PQA01\",\r\n        \"year\": 2015\r\n    }\r\n}"
+							"raw": "{\r\n    \"email\":\"user1@user.com\",\r\n    \"password\":\"password\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
 						},
 						"url": {
 							"raw": "localhost:3005/auth/login",
@@ -221,6 +255,35 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InVzZXIxQHVzZXIuY29tIiwiZXhwIjoxNzYxNjU2MzU3LCJpYXQiOjE3NjE2NTI3NTcsImp0aSI6Ijc1YTdkNDhlLTcyYzEtNGE5MC05M2JkLWIxYjU2YjUzZTc1YSIsInJvbGUiOiJQQVNTRU5HRVIiLCJ0eXAiOiJhY2Nlc3NfdG9rZW4iLCJ1c2VyX2lkIjoiZDY3MTUxMGItOGRlYy00OWY5LTg4NzItOGYyZjIzNmI2NmE3In0.ONOs6TWw8Nl2QcyGqJbPFgJzDTxyt6AZhktCzYnVyFc",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "localhost:3005/auth/me",
+							"host": [
+								"localhost"
+							],
+							"port": "3005",
+							"path": [
+								"auth",
+								"me"
+							]
+						}
+					},
+					"response": []
 				}
 			]
 		},
@@ -235,7 +298,7 @@
 							"bearer": [
 								{
 									"key": "token",
-									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRhbXV0ZHpoaW4yMDAwQG1haWwucnUiLCJleHAiOjE3NjA1NDk1MDQsImlhdCI6MTc2MDU0ODYwNCwianRpIjoiMjQ1YWRkZTctMTJjYS00NDJhLWJkYTMtZWI5ZDEwNGVkOTMzIiwicm9sZSI6IlBBU1NFTkdFUiIsInR5cCI6ImFjY2Vzc190b2tlbiIsInVzZXJfaWQiOiI5NDgwODA3ZC01NjgzLTQzN2MtODFmNi02NzJjZTAzMDE1Y2EifQ.PLJ66sD06gkuOv6xz-CG2SYUVchQWi96cmk9PRPXVSU",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImJla2ExMjM0NUBnbWFpbC5jb20iLCJleHAiOjE3NjEyMzUwNzEsImlhdCI6MTc2MTIzMTQ3MSwianRpIjoiODYwNDBiYWQtM2MxZi00ODFhLTgwYzYtY2NjYWQ4YjNmMDg5Iiwicm9sZSI6IlBBU1NFTkdFUiIsInR5cCI6ImFjY2Vzc190b2tlbiIsInVzZXJfaWQiOiIzMzAyYmQxYS1hNTEwLTQ4ODYtYjEwOC02OTJmNGY4OTE0NDMifQ.cEIKw2KMtmzSYAcJnm2KUx9YVrP087k-CXM9Vh0ntBs",
 									"type": "string"
 								}
 							]
@@ -264,7 +327,7 @@
 							"bearer": [
 								{
 									"key": "token",
-									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRhbXV0ZHpoaW4yMDAwQG1haWwucnUiLCJleHAiOjE3NjA1NDk1MDQsImlhdCI6MTc2MDU0ODYwNCwianRpIjoiMjQ1YWRkZTctMTJjYS00NDJhLWJkYTMtZWI5ZDEwNGVkOTMzIiwicm9sZSI6IlBBU1NFTkdFUiIsInR5cCI6ImFjY2Vzc190b2tlbiIsInVzZXJfaWQiOiI5NDgwODA3ZC01NjgzLTQzN2MtODFmNi02NzJjZTAzMDE1Y2EifQ.PLJ66sD06gkuOv6xz-CG2SYUVchQWi96cmk9PRPXVSU",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImJla2ExMjM0NUBnbWFpbC5jb20iLCJleHAiOjE3NjEyMzUwNzEsImlhdCI6MTc2MTIzMTQ3MSwianRpIjoiODYwNDBiYWQtM2MxZi00ODFhLTgwYzYtY2NjYWQ4YjNmMDg5Iiwicm9sZSI6IlBBU1NFTkdFUiIsInR5cCI6ImFjY2Vzc190b2tlbiIsInVzZXJfaWQiOiIzMzAyYmQxYS1hNTEwLTQ4ODYtYjEwOC02OTJmNGY4OTE0NDMifQ.cEIKw2KMtmzSYAcJnm2KUx9YVrP087k-CXM9Vh0ntBs",
 									"type": "string"
 								}
 							]
@@ -272,7 +335,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "localhost:3004/admin/rides/active",
+							"raw": "localhost:3004/admin/rides/active?page=1&page_size=2&sort=-started_at",
 							"host": [
 								"localhost"
 							],
@@ -281,6 +344,81 @@
 								"admin",
 								"rides",
 								"active"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "2"
+								},
+								{
+									"key": "sort",
+									"value": "-started_at"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Ride",
+			"item": [
+				{
+					"name": "Create Ride",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"passenger_id\": \"7219c9e7-25c4-477b-9ac3-3ddbbece3033\",\n    \"pickup_latitude\": 43.238949,\n    \"pickup_longitude\": 76.889709,\n    \"pickup_address\": \"Almaty Central Park\",\n    \"destination_latitude\": 43.222015,\n    \"destination_longitude\": 76.851511,\n    \"destination_address\": \"Kok-Tobe Hill\",\n    \"ride_type\": \"ECONOMY\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "localhost:3000/rides",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"rides"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Cancel Ride",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"reason\": \"cannot\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "localhost:3000/rides/be9889ff-0ec6-43f6-9811-bc8e39064b0c/cancel",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"rides",
+								"be9889ff-0ec6-43f6-9811-bc8e39064b0c",
+								"cancel"
 							]
 						}
 					},
