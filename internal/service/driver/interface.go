@@ -2,6 +2,7 @@ package drivergo
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
@@ -75,4 +76,9 @@ type DriverCommunicator interface {
 	SendRideOffer(ctx context.Context, driverID uuid.UUID, offer models.RideOffer) (bool, error)
 	SendRideDetails(ctx context.Context, details models.RideDetails) error
 	ListenLocationUpdates(ctx context.Context, driverID, rideID uuid.UUID, handler func(ctx context.Context, location models.RideLocationUpdate) error) error
+}
+
+type RideEventRepository interface {
+	// CreateEvent записывает событие, связанное с поездкой в таблицу ride_events
+	CreateEvent(ctx context.Context, rideID uuid.UUID, eventType types.RideEvent, eventData json.RawMessage) error
 }

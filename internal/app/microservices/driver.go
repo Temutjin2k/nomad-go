@@ -41,12 +41,21 @@ type Consumers struct {
 
 func (c *Consumers) Start(ctx context.Context, errCh chan error) {
 	go func() {
-		c.log.Info(ctx, "Ride request consume has been started")
+		c.log.Info(ctx, "ConsumeRideRequest has been started")
 		if err := c.rideConsumer.ConsumeRideRequest(ctx, c.uc.SearchDriver); err != nil {
-			errCh <- fmt.Errorf("failed to start ride consume process: %w", err)
+			errCh <- fmt.Errorf("failed to start ConsumeRideRequest: %w", err)
 			return
 		}
-		c.log.Info(ctx, "Ride request consume has been finished")
+		c.log.Info(ctx, "ConsumeRideRequest has been finished")
+	}()
+
+	go func() {
+		c.log.Info(ctx, "ConsumeStatusUpdate has been started")
+		if err := c.rideConsumer.ConsumeStatusUpdate(ctx, c.uc.HandleRideStatus); err != nil {
+			errCh <- fmt.Errorf("failed to start ConsumeStatusUpdate: %w", err)
+			return
+		}
+		c.log.Info(ctx, "ConsumeStatusUpdate has been finished")
 	}()
 }
 
@@ -71,6 +80,7 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 	userRepo := repo.NewUserRepo(postgresDB.Pool)
 	rideRepo := repo.NewRideRepo(postgresDB.Pool)
 	refreshTokenRepo := repo.NewRefreshTokenRepo(postgresDB.Pool)
+	eventRepo := repo.NewRideEvent(postgresDB.Pool)
 
 	// Message Broker publisher
 	driverProducer := rabbitAdapter.NewDriverProducer(rabbitMq)
@@ -89,7 +99,19 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 	sender := wshandler.NewDriverHub(wsHub)
 
 	// Main Service
-	driverService := drivergo.New(driverRepo, sessionRepo, coordinateRepo, userRepo, rideRepo, locationIQclient, driverProducer, calculator, sender, trm, log)
+	driverService := drivergo.New(
+		driverRepo,
+		sessionRepo,
+		coordinateRepo,
+		userRepo, rideRepo,
+		locationIQclient,
+		driverProducer,
+		calculator,
+		sender,
+		trm,
+		eventRepo,
+		log,
+	)
 	tokenService := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authService := auth.NewAuthService(userRepo, tokenService, log)
 

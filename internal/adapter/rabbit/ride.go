@@ -30,7 +30,6 @@ type RideMsgBroker struct {
 	QueueDriverResponse     string
 	QueueDriverStatusUpdate string
 	QueueLocationUpdate     string
-	QueueRideStatusUpdate   string
 
 	l logger.Logger
 }
