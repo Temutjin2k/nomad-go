@@ -10,9 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
+
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
-	"github.com/gorilla/websocket"
 )
 
 // Conn представляет собой одно соединение WebSocket, связанное с сущностью (например, драйвером)

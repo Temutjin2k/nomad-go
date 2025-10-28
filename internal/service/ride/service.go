@@ -25,10 +25,10 @@ type RideService struct {
 	publisher RideMsgBroker
 	calculate ridecalc.Calculator
 
-	passengerSender *wshandler.RideWsHandler
+	passengerSender wshandler.RideWsHandler
 }
 
-func NewRideService(repo RideRepo, calculate ridecalc.Calculator, trm trm.TxManager, publisher RideMsgBroker, passengerSender *wshandler.RideWsHandler, logger logger.Logger) *RideService {
+func NewRideService(repo RideRepo, calculate ridecalc.Calculator, trm trm.TxManager, publisher RideMsgBroker, passengerSender wshandler.RideWsHandler, logger logger.Logger) *RideService {
 	return &RideService{
 		repo:            repo,
 		calculate:       calculate,

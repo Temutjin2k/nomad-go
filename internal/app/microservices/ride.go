@@ -33,13 +33,19 @@ type RideService struct {
 }
 
 type RideConsumers struct {
-	log logger.Logger
+	rideConsumer *rabbit.RideMsgBroker
+	rideService  *ridego.RideService
+	log          logger.Logger
 }
+
 
 func (c *RideConsumers) Start(ctx context.Context, errCh chan error) {
 	go func() {
 		c.log.Info(ctx, "Ride request consume has been started")
-
+		if err := c.rideConsumer.ConsumeDriverLocationUpdate(ctx, c.rideService.HandleDriverLocationUpdate); err != nil {
+			errCh <- fmt.Errorf("failed to start ride consume process: %w", err)
+			return
+		}
 		c.log.Info(ctx, "Ride request consume has been finished")
 	}()
 }
@@ -86,7 +92,9 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 		postgresDB: postgresDB,
 		rabbitMQ:   rabbitClient,
 		consumers: &RideConsumers{
-			log: log,
+			rideConsumer: rabbitRideBroker,
+			rideService:  rideService,
+			log:         log,
 		},
 
 		cfg: cfg,

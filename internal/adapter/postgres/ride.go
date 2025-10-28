@@ -228,6 +228,30 @@ func (r *RideRepo) UpdateStatus(ctx context.Context, rideID uuid.UUID, status ty
 	return nil
 }
 
+func (r *RideRepo) UpdateMatchedAt(ctx context.Context, rideID uuid.UUID) error {
+	q := TxorDB(ctx, r.db)
+
+	query := `
+		UPDATE rides
+		SET
+			matched_at = now(),
+			updated_at = now()
+		WHERE id = $1;`
+	cmdTag, err := q.Exec(ctx, query,
+		rideID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("ride repo: UpdateMatchedAt: %w", err)
+	}
+
+	if cmdTag.RowsAffected() == 0 {
+		return wrap.Error(ctx, types.ErrNotFound)
+	}
+
+	return nil
+}
+
 func (r *RideRepo) GetDetails(ctx context.Context, rideID uuid.UUID) (*models.RideDetails, error) {
 	const op = "RideRepo.RideDetails"
 	query := `
