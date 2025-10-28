@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"time"
 
+	amqp "github.com/rabbitmq/amqp091-go"
+
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/rabbit"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const (
@@ -205,7 +206,7 @@ func (r *DriverBroker) ConsumeStatusUpdate(ctx context.Context, fn MatchConfHand
 						return
 					}
 
-					ctxx := wrap.WithRequestID(wrap.WithRideID(wrap.WithDriverID(ctx, req.DriverID.String()), req.RideID.String()), msg.CorrelationId)
+					ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), msg.CorrelationId)
 
 					// Вызов обработчика
 					if err := fn(ctxx, req); err != nil {

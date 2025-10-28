@@ -113,7 +113,7 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		}
 
 		go func() {
-			ctx, cancel := context.WithTimeout(ctx, time.Minute*2)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
 			defer cancel()
 			// Start a goroutine to handle the driver's response
 			if err := s.publisher.ConsumeDriverResponse(ctx, createdRide.ID, s.HandleDriverResponse); err != nil {
@@ -198,70 +198,6 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 	return cancelledRide, nil
 }
 
-// startRideTimeout запускает таймер ожидания водителя.
-// Если по истечении 2 минут поездка все еще в статусе "REQUESTED",
-// она автоматически отменяется, и пассажир уведомляется.
-func (s *RideService) startRideTimeout(parentCtx context.Context, rideID uuid.UUID, passengerID uuid.UUID) {
-	ctx := wrap.WithAction(wrap.WithRideID(parentCtx, rideID.String()), "ride_timeout_watcher")
-	s.logger.Info(ctx, "starting 2-minute timeout watcher for ride")
-
-	timer := time.NewTimer(2 * time.Minute)
-
-	<-timer.C
-
-	s.logger.Info(ctx, "2-minute timeout expired, checking ride status...")
-
-	var wasCancelled bool
-	err := s.trm.DoReadOnly(ctx, func(ctx context.Context) error {
-		ride, err := s.repo.Get(ctx, rideID)
-		if err != nil {
-			if errors.Is(err, types.ErrNotFound) {
-				s.logger.Warn(ctx, "ride not found, timeout watcher exiting")
-				return nil 
-			}
-			return fmt.Errorf("failed to get ride status: %w", err)
-		}
-
-		if ride.Status == string(types.StatusRequested) {
-			s.logger.Info(ctx, "ride is still in REQUESTED state, cancelling...")
-
-			now := time.Now()
-			reason := "No drivers found in time" 
-			ride.Status = string(types.StatusCancelled)
-			ride.CancellationReason = &reason
-			ride.CancelledAt = &now
-
-			if err := s.repo.Update(ctx, ride); err != nil {
-				return fmt.Errorf("failed to update ride to CANCELLED: %w", err)
-			}
-			
-			wasCancelled = true // Флаг, чтобы отправить сообщение после транзакции
-			return nil
-		}
-
-		s.logger.Info(ctx, "ride status is already updated, timeout watcher exiting", "status", ride.Status)
-		return nil
-	})
-
-	if err != nil {
-		s.logger.Error(ctx, "failed to process ride timeout", err)
-		return
-	}
-
-	if wasCancelled {
-		// Формируем сообщение для пассажира
-		wsMessage := models.PassengerRideStatusUpdateDTO{
-			Type:    "ride_status_update",
-			RideID:  rideID,
-			Status:  string(types.StatusCancelled),
-			Message: "К сожалению, не удалось найти водителя. Пожалуйста, попробуйте еще раз.",
-		}
-		
-		if err := s.passengerSender.SendToPassenger(ctx, passengerID, wsMessage); err != nil {
-			s.logger.Warn(ctx, "failed to send 'no driver found' message to passenger", "error", err)
-		}
-	}
-}
 
 func newCorrelationID() string {
 	b := make([]byte, 16)
@@ -271,3 +207,4 @@ func newCorrelationID() string {
 	}
 	return hex.EncodeToString(b)
 }
+
