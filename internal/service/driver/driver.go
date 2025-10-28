@@ -220,7 +220,7 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location mod
 			ctx,
 			models.DriverStatusUpdateMessage{
 				DriverID:  driverID,
-				Status:    types.StatusDriverAvailable,
+				Status:    types.StatusDriverAvailable.String(),
 				Timestamp: now,
 				RideID:    nil,
 			}); err != nil {
@@ -287,7 +287,7 @@ func (s *Service) GoOffline(ctx context.Context, driverID uuid.UUID) (models.Ses
 			ctx,
 			models.DriverStatusUpdateMessage{
 				DriverID:  driverID,
-				Status:    types.StatusDriverOffline,
+				Status:    types.StatusDriverOffline.String(),
 				Timestamp: now,
 				RideID:    nil,
 			}); err != nil {
@@ -340,7 +340,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 		}
 
 		// Validate ride status and driver assignment
-		if ride.Status != types.StatusArrived {
+		if ride.Status != types.StatusArrived.String() {
 			return types.ErrRideNotArrived
 		}
 
@@ -370,7 +370,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 			ctx,
 			models.DriverStatusUpdateMessage{
 				DriverID:  driverID,
-				Status:    types.StatusDriverBusy,
+				Status:    types.StatusDriverBusy.String(),
 				Timestamp: startTime,
 				RideID:    &rideID,
 			}); err != nil {
@@ -411,7 +411,7 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 		earnings = ride.EstimatedFare
 
 		// Ride status must be IN_PROGRESS
-		if ride.Status != types.StatusInProgress {
+		if ride.Status != types.StatusInProgress.String() {
 			return types.ErrRideNotInProgress
 		}
 
@@ -452,7 +452,7 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 			ctx,
 			models.DriverStatusUpdateMessage{
 				DriverID:  data.DriverID,
-				Status:    types.StatusDriverAvailable,
+				Status:    types.StatusDriverAvailable.String(),
 				Timestamp: data.CompleteTime,
 				RideID:    &rideID,
 			}); err != nil {

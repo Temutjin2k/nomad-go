@@ -40,12 +40,21 @@ type RideConsumers struct {
 
 func (c *RideConsumers) Start(ctx context.Context, errCh chan error) {
 	go func() {
-		c.log.Info(ctx, "Ride request consume has been started")
+		c.log.Info(ctx, "ConsumeDriverLocationUpdate has been started")
 		if err := c.rideConsumer.ConsumeDriverLocationUpdate(ctx, c.rideService.HandleDriverLocationUpdate); err != nil {
-			errCh <- fmt.Errorf("failed to start ride consume process: %w", err)
+			errCh <- fmt.Errorf("failed to start ConsumeDriverLocationUpdate: %w", err)
 			return
 		}
-		c.log.Info(ctx, "Ride request consume has been finished")
+		c.log.Info(ctx, "ConsumeDriverLocationUpdate has been finished")
+	}()
+
+	go func() {
+		c.log.Info(ctx, "ConsumeDriverStatusUpdate has been started")
+		if err := c.rideConsumer.ConsumeDriverStatusUpdate(ctx, c.rideService.HandleDriverStatusUpdate); err != nil {
+			errCh <- fmt.Errorf("failed to start ConsumeDriverStatusUpdate: %w", err)
+			return
+		}
+		c.log.Info(ctx, "ConsumeDriverStatusUpdate has been finished")
 	}()
 }
 
@@ -68,6 +77,7 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 	rideRepo := repo.NewRideRepo(postgresDB.Pool)
 	userRepo := repo.NewUserRepo(postgresDB.Pool)
 	refreshTokenRepo := repo.NewRefreshTokenRepo(postgresDB.Pool)
+	eventRepo := repo.NewRideEvent(postgresDB.Pool)
 
 	// init services
 	trm := trm.New(postgresDB.Pool)
@@ -76,7 +86,7 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 	hub := ws.NewConnHub(log)
 	wsRide := wshandler.NewRideWsHandler(hub)
 
-	rideService := ridego.NewRideService(rideRepo, calculator, trm, rabbitRideBroker, wsRide, log)
+	rideService := ridego.NewRideService(rideRepo, calculator, trm, rabbitRideBroker, wsRide, eventRepo, log)
 	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authSvc := auth.NewAuthService(userRepo, tokenSvc, log)
 
@@ -104,6 +114,8 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 func (s *RideService) Start(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	s.httpServer.Run(ctx, errCh)
+	s.consumers.Start(ctx, errCh)
+
 	defer func() {
 		s.close(ctx)
 		s.log.Info(ctx, "ride service closed")

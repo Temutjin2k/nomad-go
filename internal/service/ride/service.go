@@ -18,22 +18,24 @@ import (
 )
 
 type RideService struct {
-	repo      RideRepo
-	logger    logger.Logger
-	trm       trm.TxManager
-	publisher RideMsgBroker
-	calculate ridecalc.Calculator
-
+	repo            RideRepo
+	trm             trm.TxManager
+	publisher       RideMsgBroker
+	calculate       ridecalc.Calculator
 	passengerSender RideWsHandler
+	eventRepo       RideEventRepository
+
+	logger logger.Logger
 }
 
-func NewRideService(repo RideRepo, calculate ridecalc.Calculator, trm trm.TxManager, publisher RideMsgBroker, passengerSender RideWsHandler, logger logger.Logger) *RideService {
+func NewRideService(repo RideRepo, calculate ridecalc.Calculator, trm trm.TxManager, publisher RideMsgBroker, passengerSender RideWsHandler, eventRepo RideEventRepository, logger logger.Logger) *RideService {
 	return &RideService{
 		repo:            repo,
 		calculate:       calculate,
 		trm:             trm,
 		publisher:       publisher,
 		passengerSender: passengerSender,
+		eventRepo:       eventRepo,
 		logger:          logger,
 	}
 }
@@ -68,7 +70,7 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		ride.EstimatedDurationMin = duration
 		ride.EstimatedFare = fare
 		ride.RideNumber = rideNumber
-		ride.Status = types.StatusRequested
+		ride.Status = types.StatusRequested.String()
 		ride.Priority = priority
 
 		createdRide, err = s.repo.Create(ctx, ride)
@@ -133,12 +135,12 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 			return wrap.Error(ctx, fmt.Errorf("could not find ride by id: %w", err))
 		}
 
-		if ride.Status == types.StatusCompleted || ride.Status == types.StatusCancelled {
+		if ride.Status == types.StatusCompleted.String() || ride.Status == types.StatusCancelled.String() {
 			return types.ErrRideCannotBeCancelled
 		}
 
 		now := time.Now()
-		ride.Status = types.StatusCancelled
+		ride.Status = types.StatusCancelled.String()
 		ride.CancellationReason = &reason
 		ride.CancelledAt = &now
 

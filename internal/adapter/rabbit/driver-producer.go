@@ -44,9 +44,10 @@ func (r *DriverProducer) publish(ctx context.Context, exchange, routingKey strin
 	}
 
 	pub := amqp091.Publishing{
-		ContentType: "application/json",
-		Body:        body,
-		Timestamp:   time.Now(),
+		ContentType:   "application/json",
+		Body:          body,
+		Timestamp:     time.Now(),
+		CorrelationId: wrap.GetRequestID(ctx),
 	}
 
 	if err := retry(5, time.Second*2,
