@@ -23,25 +23,17 @@ const (
 	QueueLocationUpdate     = "location_updates"
 )
 
-type RideMsgBroker struct {
+type RideBroker struct {
 	client       *rabbit.RabbitMQ
 	RideExchange string
-
-	QueueDriverResponse     string
-	QueueDriverStatusUpdate string
-	QueueLocationUpdate     string
 
 	l logger.Logger
 }
 
-func NewRideMsgBroker(client *rabbit.RabbitMQ, log logger.Logger) *RideMsgBroker {
-	rideBroker := &RideMsgBroker{
+func NewRideBroker(client *rabbit.RabbitMQ, log logger.Logger) *RideBroker {
+	rideBroker := &RideBroker{
 		client:       client,
 		RideExchange: RideExchange,
-
-		QueueDriverResponse:     QueueDriverResponse,
-		QueueDriverStatusUpdate: QueueDriverStatusUpdate,
-		QueueLocationUpdate:     QueueLocationUpdate,
 
 		l: log,
 	}
@@ -51,7 +43,7 @@ func NewRideMsgBroker(client *rabbit.RabbitMQ, log logger.Logger) *RideMsgBroker
 
 // публикует событие о новой поездке для поиска водителя.
 // отправляет в exchange 'ride_topic' с ключом 'ride.request.{ride_type}'.
-func (r *RideMsgBroker) PublishRideRequested(ctx context.Context, msg models.RideRequestedMessage) error {
+func (r *RideBroker) PublishRideRequested(ctx context.Context, msg models.RideRequestedMessage) error {
 	ctx = wrap.WithAction(ctx, "rabbitmq_publish_ride_request")
 
 	// Проверяем и восстанавливаем соединение
@@ -90,7 +82,7 @@ func (r *RideMsgBroker) PublishRideRequested(ctx context.Context, msg models.Rid
 
 // публикует событие об изменении статуса поездки.
 // отправляет в exchange 'ride_topic' с ключом 'ride.status.{status}'.
-func (r *RideMsgBroker) PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error {
+func (r *RideBroker) PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error {
 	ctx = wrap.WithAction(ctx, "rabbitmq_publish_ride_status")
 
 	// Проверяем и восстанавливаем соединение
@@ -128,7 +120,7 @@ func (r *RideMsgBroker) PublishRideStatus(ctx context.Context, msg models.RideSt
 // DriverStatusUpdateHandler читает обновления статуса от driver сервиса
 type DriverStatusUpdateHandler func(ctx context.Context, req models.DriverStatusUpdateMessage) error
 
-func (r *RideMsgBroker) ConsumeDriverStatusUpdate(ctx context.Context, handler DriverStatusUpdateHandler) error {
+func (r *RideBroker) ConsumeDriverStatusUpdate(ctx context.Context, handler DriverStatusUpdateHandler) error {
 	ctx = wrap.WithAction(ctx, "rabbitmq_consume_driver_status_update")
 
 	// Основной цикл потребителя
@@ -146,14 +138,14 @@ func (r *RideMsgBroker) ConsumeDriverStatusUpdate(ctx context.Context, handler D
 		}
 
 		// Подписываемся на очередь
-		msgs, err := r.client.Channel.Consume(r.QueueDriverStatusUpdate, "", false, false, false, false, nil)
+		msgs, err := r.client.Channel.Consume(QueueDriverStatusUpdate, "", false, false, false, false, nil)
 		if err != nil {
 			r.l.Error(ctx, "consume failed", err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
 
-		r.l.Info(ctx, "start consuming driver status update", "queue", r.QueueDriverStatusUpdate)
+		r.l.Info(ctx, "start consuming driver status update", "queue", QueueDriverStatusUpdate)
 
 		// Цикл чтения сообщений
 	consumeLoop:
@@ -179,7 +171,7 @@ func (r *RideMsgBroker) ConsumeDriverStatusUpdate(ctx context.Context, handler D
 					}
 
 					// добавляем в контекст переменные для логирования и трассировки
-					ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), d.CorrelationId)
+					ctxx := wrap.WithRequestID(ctx, d.CorrelationId)
 
 					if err := handler(ctxx, req); err != nil {
 						r.l.Error(wrap.ErrorCtx(ctx, err), "failed to handle driver response", err)
@@ -199,7 +191,7 @@ func (r *RideMsgBroker) ConsumeDriverStatusUpdate(ctx context.Context, handler D
 
 type DriverResponseHandler func(ctx context.Context, req models.DriverMatchResponse) error
 
-func (r *RideMsgBroker) ConsumeDriverResponse(ctx context.Context, rideID uuid.UUID, handler DriverResponseHandler) error {
+func (r *RideBroker) ConsumeDriverResponse(ctx context.Context, rideID uuid.UUID, handler DriverResponseHandler) error {
 	ctx = wrap.WithAction(ctx, "rabbitmq_consume_driver_response")
 
 	// Основной цикл потребителя
@@ -217,15 +209,14 @@ func (r *RideMsgBroker) ConsumeDriverResponse(ctx context.Context, rideID uuid.U
 		}
 
 		// Подписываемся на очередь
-		const queue = "driver_topic"
-		msgs, err := r.client.Channel.Consume(r.QueueDriverResponse, "", false, false, false, false, nil)
+		msgs, err := r.client.Channel.Consume(QueueDriverResponse, "", false, false, false, false, nil)
 		if err != nil {
 			r.l.Error(ctx, "consume failed", err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
 
-		r.l.Info(ctx, "start consuming driver response", "queue", queue)
+		r.l.Info(ctx, "start consuming driver response", "queue", QueueDriverResponse)
 
 		// Цикл чтения сообщений
 	consumeLoop:
@@ -271,7 +262,7 @@ func (r *RideMsgBroker) ConsumeDriverResponse(ctx context.Context, rideID uuid.U
 
 type LocationUpdateHandler func(ctx context.Context, req models.RideLocationUpdate) error
 
-func (r *RideMsgBroker) ConsumeDriverLocationUpdate(ctx context.Context, handler LocationUpdateHandler) error {
+func (r *RideBroker) ConsumeDriverLocationUpdate(ctx context.Context, handler LocationUpdateHandler) error {
 	ctx = wrap.WithAction(ctx, "rabbitmq_consume_driver_location")
 
 	for {
@@ -287,12 +278,14 @@ func (r *RideMsgBroker) ConsumeDriverLocationUpdate(ctx context.Context, handler
 			continue
 		}
 
-		msgs, err := r.client.Channel.Consume(r.QueueLocationUpdate, "", false, false, false, false, nil)
+		msgs, err := r.client.Channel.Consume(QueueLocationUpdate, "", false, false, false, false, nil)
 		if err != nil {
 			r.l.Error(ctx, "consume failed", err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
+
+		r.l.Info(ctx, "start consuming location update", "queue", QueueLocationUpdate)
 
 	consumeLoop:
 		for {

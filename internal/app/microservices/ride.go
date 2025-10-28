@@ -33,7 +33,7 @@ type RideService struct {
 }
 
 type RideConsumers struct {
-	rideConsumer *rabbit.RideMsgBroker
+	rideConsumer *rabbit.RideBroker
 	rideService  *ridego.RideService
 	log          logger.Logger
 }
@@ -71,7 +71,7 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup rabbitmq: %w", err)
 	}
-	rabbitRideBroker := rabbit.NewRideMsgBroker(rabbitClient, log)
+	rabbitRideBroker := rabbit.NewRideBroker(rabbitClient, log)
 
 	// init repositories
 	rideRepo := repo.NewRideRepo(postgresDB.Pool)

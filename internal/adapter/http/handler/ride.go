@@ -190,6 +190,12 @@ func (h *Ride) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Listen for messages
 	if err := conn.Listen(); err != nil {
 		h.l.Error(ctx, "websocket listen failed", err)
+		_ = wsConn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "websocket listen failed"),
+			time.Now().Add(time.Second),
+		)
+		_ = wsConn.Close()
 	}
 }
 

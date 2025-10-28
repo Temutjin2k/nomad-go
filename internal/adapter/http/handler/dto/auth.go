@@ -14,6 +14,9 @@ type RegisterUserRequest struct {
 }
 
 func (r *RegisterUserRequest) ToModel() *models.UserCreateRequest {
+	if r.Attrs == nil {
+		r.Attrs = make(map[string]any)
+	}
 	r.Attrs["name"] = r.Name
 	r.Attrs["phone"] = r.Phone
 	return &models.UserCreateRequest{
