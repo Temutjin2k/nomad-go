@@ -191,7 +191,7 @@ func (r *RideBroker) ConsumeDriverStatusUpdate(ctx context.Context, handler Driv
 
 type DriverResponseHandler func(ctx context.Context, req models.DriverMatchResponse) error
 
-func (r *RideBroker) ConsumeDriverResponse(ctx context.Context, rideID uuid.UUID, handler DriverResponseHandler) error {
+func (r *RideMsgBroker) ConsumeDriverResponse(ctx context.Context, targetRideID uuid.UUID, handler DriverResponseHandler) error {
 	ctx = wrap.WithAction(ctx, "rabbitmq_consume_driver_response")
 
 	// Основной цикл потребителя
@@ -233,28 +233,36 @@ func (r *RideBroker) ConsumeDriverResponse(ctx context.Context, rideID uuid.UUID
 					continue consumeLoop
 				}
 
-				go func(d amqp091.Delivery) {
-					var req models.DriverMatchResponse
-					if err := json.Unmarshal(d.Body, &req); err != nil {
-						r.l.Error(ctx, "failed to unmarshal driver match response", err)
-						d.Nack(false, false) // не подтверждаем сообщение
-						return
+				var req models.DriverMatchResponse
+				if err := json.Unmarshal(msg.Body, &req); err != nil {
+					r.l.Error(ctx, "failed to unmarshal driver match response", err)
+					msg.Nack(false, false) // не подтверждаем сообщение
+					continue consumeLoop
+				}
+
+				if req.RideID != targetRideID {
+					// Не наш rideID, пропускаем сообщение
+					msg.Nack(false, true)
+					continue consumeLoop
+				}
+
+				// добавляем в контекст переменные для логирования и трассировки
+				ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), msg.CorrelationId)
+				
+
+				if err := handler(ctxx, req); err != nil {
+					r.l.Error(wrap.ErrorCtx(ctx, err), "failed to handle driver response", err)
+
+					// если ошибка восстановимая, повторно помещаем в очередь
+					if isRecoverableError(err) {
+						msg.Nack(false, true) // повторно помещаем в очередь
+					} else {
+						msg.Nack(false, false) // не подтверждаем сообщение
 					}
+				}
 
-					// добавляем в контекст переменные для логирования и трассировки
-					ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), d.CorrelationId)
+				return nil
 
-					if err := handler(ctxx, req); err != nil {
-						r.l.Error(wrap.ErrorCtx(ctx, err), "failed to handle driver response", err)
-
-						// если ошибка восстановимая, повторно помещаем в очередь
-						if isRecoverableError(err) {
-							d.Nack(false, true) // повторно помещаем в очередь
-						} else {
-							d.Nack(false, false) // не подтверждаем сообщение
-						}
-					}
-				}(msg)
 			}
 		}
 	}

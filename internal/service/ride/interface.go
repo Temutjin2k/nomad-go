@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/Temutjin2k/ride-hail-system/internal/adapter/rabbit"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
@@ -30,6 +31,7 @@ type (
 	RideMsgBroker interface {
 		PublishRideRequested(ctx context.Context, msg models.RideRequestedMessage) error
 		PublishRideStatus(ctx context.Context, msg models.RideStatusUpdateMessage) error
+		ConsumeDriverResponse(ctx context.Context, rideID uuid.UUID, handler rabbit.DriverResponseHandler) error 
 	}
 
 	RideWsHandler interface {
