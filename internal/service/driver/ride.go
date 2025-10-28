@@ -14,10 +14,10 @@ import (
 
 func (s *Service) SearchDriver(ctx context.Context, req models.RideRequestedMessage) error {
 	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
-		Action:        "search_driver",
-		RideID:        req.RideID.String(),
-		RideNumber:    req.RideNumber,
-		CorrelationID: req.CorrelationID,
+		Action:     "search_driver",
+		RideID:     req.RideID.String(),
+		RideNumber: req.RideNumber,
+		RequestID:  wrap.GetRequestID(ctx),
 	})
 
 	offer := s.prepareRideOffer(req)
