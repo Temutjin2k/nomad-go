@@ -2,6 +2,7 @@ package drivergo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -44,10 +45,23 @@ type repos struct {
 	ride       RideGetter
 	user       UserRepo
 	coordinate CoordinateRepo
+	eventRepo  RideEventRepository
 }
 
 // New returns a new instance of the driver service with all dependencies injected.
-func New(driverRepo DriverRepo, sessionRepo DriverSessionRepo, coordinateRepo CoordinateRepo, userRepo UserRepo, rideRepo RideGetter, addressGetter GeoCoder, publisher Publisher, calculate ridecalc.Calculator, communicator DriverCommunicator, trm trm.TxManager, l logger.Logger) *Service {
+func New(
+	driverRepo DriverRepo,
+	sessionRepo DriverSessionRepo,
+	coordinateRepo CoordinateRepo,
+	userRepo UserRepo,
+	rideRepo RideGetter,
+	addressGetter GeoCoder,
+	publisher Publisher,
+	calculate ridecalc.Calculator,
+	communicator DriverCommunicator,
+	trm trm.TxManager,
+	eventRepo RideEventRepository,
+	l logger.Logger) *Service {
 	return &Service{
 		repos: repos{
 			driver:     driverRepo,
@@ -370,7 +384,7 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 			ctx,
 			models.DriverStatusUpdateMessage{
 				DriverID:  driverID,
-				Status:    types.StatusDriverBusy.String(),
+				Status:    types.StatusInProgress.String(),
 				Timestamp: startTime,
 				RideID:    &rideID,
 			}); err != nil {
@@ -452,7 +466,7 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 			ctx,
 			models.DriverStatusUpdateMessage{
 				DriverID:  data.DriverID,
-				Status:    types.StatusDriverAvailable.String(),
+				Status:    types.StatusCompleted.String(),
 				Timestamp: data.CompleteTime,
 				RideID:    &rideID,
 			}); err != nil {
@@ -510,6 +524,12 @@ func (s *Service) UpdateLocation(ctx context.Context, data models.RideLocationUp
 
 	if err := s.infra.trm.Do(ctx, fn); err != nil {
 		return uuid.UUID{}, wrap.Error(ctx, err)
+	}
+
+	// записываем ивент
+	eventData, _ := json.Marshal(data) // non fatal event so just ignore error
+	if err := s.repos.eventRepo.CreateEvent(ctx, *data.RideID, types.EventLocationUpdated, eventData); err != nil {
+		s.l.Warn(ctx, "failed to create ride event", "event_type", types.EventLocationUpdated, "error", err.Error())
 	}
 
 	return coordinateID, nil

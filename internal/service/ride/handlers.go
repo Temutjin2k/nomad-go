@@ -78,6 +78,12 @@ func (s *RideService) HandleDriverResponse(ctx context.Context, msg models.Drive
 		return wrap.Error(ctx, err)
 	}
 
+	// записываем ивент
+	eventData, _ := json.Marshal(msg) // non fatal event so just ignore error
+	if err := s.eventRepo.CreateEvent(ctx, msg.RideID, types.EventDriverMatched, eventData); err != nil {
+		s.logger.Warn(ctx, "failed to create ride event", "event_type", types.EventDriverMatched, "error", err.Error())
+	}
+
 	return nil
 }
 
@@ -162,6 +168,7 @@ func (s *RideService) HandleDriverLocationUpdate(ctx context.Context, msg models
 	return nil
 }
 
+// HandleDriverStatusUpdate обрабатывает сообщение от driver сервиса об изменений статуса водителя
 func (s *RideService) HandleDriverStatusUpdate(ctx context.Context, msg models.DriverStatusUpdateMessage) error {
 	ctx = wrap.WithAction(ctx, "handle_driver_status_update")
 
@@ -209,24 +216,16 @@ func (s *RideService) handleDriverEnRoute(ctx context.Context, ride *models.Ride
 			return fmt.Errorf("failed to update status to EN_ROUTE: %w", err)
 		}
 
-		// По идее не нужно отправлять драйверу сообщение о том что поездка EnRoute,
-		// по сути не нужно даже ничего отправлять
-		message := models.RideStatusUpdateMessage{
-			RideID:        ride.ID,
-			Status:        types.StatusEnRoute.String(),
-			Timestamp:     time.Now(),
-			DriverID:      ride.DriverID,
-			CorrelationID: wrap.GetRequestID(ctx),
-		}
-
-		if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
-			return err
-		}
-
 		// отправляем пассажиру сообщение по вебсокету
 		wsMessage := models.StatusUpdateWebSocketMessage{
 			EventType: types.EventStatusChanged,
-			Data:      message,
+			Data: models.RideStatusUpdateMessage{
+				RideID:        ride.ID,
+				Status:        types.StatusEnRoute.String(),
+				Timestamp:     time.Now(),
+				DriverID:      ride.DriverID,
+				CorrelationID: wrap.GetRequestID(ctx),
+			},
 		}
 		if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
 			return fmt.Errorf("failed to notify passnager: %w", err)
@@ -237,21 +236,10 @@ func (s *RideService) handleDriverEnRoute(ctx context.Context, ride *models.Ride
 		return wrap.Error(ctx, err)
 	}
 
-	eventData := struct {
-		Data models.DriverStatusUpdateMessage `json:"driver_status_update_message"`
-	}{
-		Data: msg,
-	}
-
-	bytes, err := json.Marshal(eventData)
-	if err != nil {
-		s.logger.Warn(ctx, "failed to marshal event data", "error", err.Error())
-		// не фатальная ошибка, продолжаем
-	}
-
+	bytes, _ := json.Marshal(msg) // non fatal event so just ignore error
 	// CreateEvent записывает событие, связанное с поездкой в таблицу ride_events
 	if err := s.eventRepo.CreateEvent(ctx, ride.ID, types.EventStatusChanged, bytes); err != nil {
-		s.logger.Warn(ctx, "failed to create ride event", "error", err.Error())
+		s.logger.Warn(ctx, "failed to create ride event", "event_type", types.EventStatusChanged, "error", err.Error())
 		// не фатальная ошибка, продолжаем
 	}
 
@@ -274,21 +262,16 @@ func (s *RideService) handleDriverArrived(ctx context.Context, ride *models.Ride
 			return err
 		}
 
-		message := models.RideStatusUpdateMessage{
-			RideID:        ride.ID,
-			Status:        types.StatusArrived.String(),
-			Timestamp:     time.Now(),
-			DriverID:      ride.DriverID,
-			CorrelationID: wrap.GetRequestID(ctx),
-		}
-		if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
-			return err
-		}
-
 		// отправляем пассажиру сообщение по вебсокету
 		wsMessage := models.StatusUpdateWebSocketMessage{
 			EventType: types.EventDriverArrived,
-			Data:      message,
+			Data: models.RideStatusUpdateMessage{
+				RideID:        ride.ID,
+				Status:        types.StatusArrived.String(),
+				Timestamp:     time.Now(),
+				DriverID:      ride.DriverID,
+				CorrelationID: wrap.GetRequestID(ctx),
+			},
 		}
 		if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
 			return fmt.Errorf("failed to notify passnager: %w", err)
@@ -299,20 +282,9 @@ func (s *RideService) handleDriverArrived(ctx context.Context, ride *models.Ride
 		return wrap.Error(ctx, err)
 	}
 
-	eventData := struct {
-		Data models.DriverStatusUpdateMessage `json:"driver_status_update_message"`
-	}{
-		Data: msg,
-	}
-
-	bytes, err := json.Marshal(eventData)
-	if err != nil {
-		s.logger.Warn(ctx, "failed to marshal event data", "error", err.Error())
-		// non-fatal
-	}
-
+	bytes, _ := json.Marshal(msg) // non fatal event so just ignore error
 	if err := s.eventRepo.CreateEvent(ctx, ride.ID, types.EventDriverArrived, bytes); err != nil {
-		s.logger.Warn(ctx, "failed to create ride event", "error", err.Error())
+		s.logger.Warn(ctx, "failed to create ride event", "event_type", types.EventDriverArrived, "error", err.Error())
 		// non-fatal
 	}
 
@@ -336,22 +308,16 @@ func (s *RideService) handleRideInProgress(ctx context.Context, ride *models.Rid
 			return err
 		}
 
-		message := models.RideStatusUpdateMessage{
-			RideID:        ride.ID,
-			Status:        types.StatusInProgress.String(),
-			Timestamp:     time.Now(),
-			DriverID:      ride.DriverID,
-			CorrelationID: wrap.GetRequestID(ctx),
-		}
-
-		if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
-			return err
-		}
-
 		// отправляем пассажиру сообщение по вебсокету
 		wsMessage := models.StatusUpdateWebSocketMessage{
 			EventType: types.EventRideStarted,
-			Data:      message,
+			Data: models.RideStatusUpdateMessage{
+				RideID:        ride.ID,
+				Status:        types.StatusInProgress.String(),
+				Timestamp:     time.Now(),
+				DriverID:      ride.DriverID,
+				CorrelationID: wrap.GetRequestID(ctx),
+			},
 		}
 		if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
 			return fmt.Errorf("failed to notify passnager: %w", err)
@@ -362,19 +328,9 @@ func (s *RideService) handleRideInProgress(ctx context.Context, ride *models.Rid
 		return wrap.Error(ctx, err)
 	}
 
-	eventData := struct {
-		Data models.DriverStatusUpdateMessage `json:"driver_status_update_message"`
-	}{
-		Data: msg,
-	}
-
-	bytes, err := json.Marshal(eventData)
-	if err != nil {
-		s.logger.Warn(ctx, "failed to marshal event data", "error", err.Error())
-	}
-
+	bytes, _ := json.Marshal(msg) // non fatal event so just ignore error
 	if err := s.eventRepo.CreateEvent(ctx, ride.ID, types.EventRideStarted, bytes); err != nil {
-		s.logger.Warn(ctx, "failed to create ride event", "error", err.Error())
+		s.logger.Warn(ctx, "failed to create ride event", "event_type", types.EventRideStarted, "error", err.Error())
 	}
 
 	return nil
@@ -397,22 +353,16 @@ func (s *RideService) handleRideCompleted(ctx context.Context, ride *models.Ride
 			return err
 		}
 
-		message := models.RideStatusUpdateMessage{
-			RideID:        ride.ID,
-			Status:        types.StatusCompleted.String(),
-			Timestamp:     time.Now(),
-			DriverID:      ride.DriverID,
-			CorrelationID: wrap.GetRequestID(ctx),
-		}
-
-		if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
-			return err
-		}
-
 		// отправляем пассажиру сообщение по вебсокету
 		wsMessage := models.StatusUpdateWebSocketMessage{
 			EventType: types.EventRideCompleted,
-			Data:      message,
+			Data: models.RideStatusUpdateMessage{
+				RideID:        ride.ID,
+				Status:        types.StatusCompleted.String(),
+				Timestamp:     time.Now(),
+				DriverID:      ride.DriverID,
+				CorrelationID: wrap.GetRequestID(ctx),
+			},
 		}
 		if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
 			return fmt.Errorf("failed to notify passnager: %w", err)
@@ -423,19 +373,9 @@ func (s *RideService) handleRideCompleted(ctx context.Context, ride *models.Ride
 		return wrap.Error(ctx, err)
 	}
 
-	eventData := struct {
-		Data models.DriverStatusUpdateMessage `json:"driver_status_update_message"`
-	}{
-		Data: msg,
-	}
-
-	bytes, err := json.Marshal(eventData)
-	if err != nil {
-		s.logger.Warn(ctx, "failed to marshal event data", "error", err.Error())
-	}
-
+	bytes, _ := json.Marshal(msg) // non fatal event so just ignore error
 	if err := s.eventRepo.CreateEvent(ctx, ride.ID, types.EventRideCompleted, bytes); err != nil {
-		s.logger.Warn(ctx, "failed to create ride event", "error", err.Error())
+		s.logger.Warn(ctx, "failed to create ride event", "event_type", types.EventRideCompleted, "error", err.Error())
 	}
 
 	return nil

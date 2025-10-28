@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -44,7 +45,7 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 	ctx = wrap.WithAction(ctx, "create_ride")
 
 	var createdRide *models.Ride
-
+	var msg models.RideRequestedMessage
 	err := s.trm.Do(ctx, func(ctx context.Context) error {
 		// проверить, есть ли у пассажира активная поездка
 		activeRide, err := s.repo.CheckActiveRideByPassengerID(ctx, ride.PassengerID)
@@ -109,11 +110,17 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 			return wrap.Error(ctx, fmt.Errorf("failed to publish ride requested event: %w", err))
 		}
 
+		msg = message
 		return nil
 	})
 
 	if err != nil {
 		return nil, wrap.Error(ctx, err)
+	}
+
+	eventData, _ := json.Marshal(msg) // non fatal event so just ignore error
+	if err := s.eventRepo.CreateEvent(ctx, createdRide.ID, types.EventRideRequested, eventData); err != nil {
+		s.logger.Warn(ctx, "failed to create ride event", "event_type", types.EventRideRequested, "error", err.Error())
 	}
 
 	s.logger.Info(ctx, "ride created successfully", "ride_id", createdRide.ID)
@@ -125,7 +132,7 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 	ctx = wrap.WithAction(wrap.WithRideID(ctx, rideID.String()), "cancel_ride")
 
 	var cancelledRide *models.Ride
-
+	var msg models.RideStatusUpdateMessage
 	err := s.trm.Do(ctx, func(ctx context.Context) error {
 		ride, err := s.repo.Get(ctx, rideID)
 		if err != nil {
@@ -162,11 +169,17 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 		}
 
 		cancelledRide = ride
+		msg = message
 		return nil
 	})
 
 	if err != nil {
 		return nil, wrap.Error(ctx, err)
+	}
+
+	eventData, _ := json.Marshal(msg) // non fatal event so just ignore error
+	if err := s.eventRepo.CreateEvent(ctx, cancelledRide.ID, types.EventRideCancelled, eventData); err != nil {
+		s.logger.Warn(ctx, "failed to create ride event", "event_type", types.EventRideCancelled, "error", err.Error())
 	}
 
 	s.logger.Info(ctx, "ride cancelled successfully")

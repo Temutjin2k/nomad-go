@@ -203,14 +203,13 @@ func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpd
 	}
 	ctx = wrap.WithDriverID(ctx, req.DriverID.String())
 
-	// Ride Cancel
-	switch types.RideStatus(req.Status) {
-	case types.StatusCancelled:
+	switch req.Status {
+	case types.StatusCancelled.String():
 		if err := s.cancelRide(ctx, *req.DriverID, req.RideID); err != nil {
 			return wrap.Error(ctx, err)
 		}
 
-	case types.StatusMatched:
+	case types.StatusMatched.String():
 		if err := s.processMatchedRide(ctx, *req.DriverID, req.RideID); err != nil {
 			return wrap.Error(ctx, err)
 		}
