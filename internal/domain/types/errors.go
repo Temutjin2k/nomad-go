@@ -33,5 +33,5 @@ var (
 
 	ErrDatabaseFailed            = errors.New("database failed")
 	ErrFailedToPublishRideStatus = errors.New("failed to publish ride status")
-	ErrRideAlreadyHasDriver   = errors.New("driver already has a driver")
+	ErrRideAlreadyHasDriver      = errors.New("driver already has a driver")
 )

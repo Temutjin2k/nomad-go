@@ -25,11 +25,15 @@ func New(db *pgxpool.Pool) *Manager {
 }
 
 // Unique key for TX
-type ctxKeyTx struct{}
-type ctxTxOptions struct{}
+type (
+	ctxKeyTx     struct{}
+	ctxTxOptions struct{}
+)
 
-var TxKey = ctxKeyTx{}
-var txOptions = ctxTxOptions{}
+var (
+	TxKey     = ctxKeyTx{}
+	txOptions = ctxTxOptions{}
+)
 
 // Do executes the provided function within a transaction context.
 // It starts a new transaction if one does not already exist in the context.
@@ -164,6 +168,7 @@ func WithOptions(ctx context.Context, opt Options) context.Context {
 func WithOptionsCtx(ctx context.Context, opt pgx.TxOptions) context.Context {
 	return WithOptions(ctx, fromPGXOptions(opt))
 }
+
 func toPGXOptions(o Options) pgx.TxOptions {
 	var am pgx.TxAccessMode
 	switch o.AccessMode {

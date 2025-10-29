@@ -60,6 +60,7 @@ func NewDriver(l logger.Logger, option *DriverServiceOptions) *Driver {
 		l:             l,
 	}
 }
+
 func (h *Driver) Register(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "register_driver")
 

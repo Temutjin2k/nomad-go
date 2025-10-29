@@ -16,9 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var (
-	configPath = flag.String("config-path", "config.yaml", "Path to the config yaml file")
-)
+var configPath = flag.String("config-path", "config.yaml", "Path to the config yaml file")
 
 func main() {
 	flag.Parse()

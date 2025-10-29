@@ -61,7 +61,8 @@ func New(
 	communicator DriverCommunicator,
 	trm trm.TxManager,
 	eventRepo RideEventRepository,
-	l logger.Logger) *Service {
+	l logger.Logger,
+) *Service {
 	return &Service{
 		repos: repos{
 			driver:     driverRepo,
@@ -84,11 +85,9 @@ func New(
 	}
 }
 
-var (
-	// validLicenseFmt ensures the license number matches a specific pattern:
-	// e.g. "AB1234567" or "AB 123456".
-	validLicenseFmt = regexp.MustCompile(`^[A-Z]{2}\s?[0-9]{6,7}$`)
-)
+// validLicenseFmt ensures the license number matches a specific pattern:
+// e.g. "AB1234567" or "AB 123456".
+var validLicenseFmt = regexp.MustCompile(`^[A-Z]{2}\s?[0-9]{6,7}$`)
 
 // Register handles new driver registration with license validation,
 // duplicate checks, and initial driver setup.

@@ -117,7 +117,6 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		msg = message
 		return nil
 	})
-
 	if err != nil {
 		return nil, wrap.Error(ctx, err)
 	}

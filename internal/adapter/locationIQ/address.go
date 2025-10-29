@@ -11,9 +11,7 @@ import (
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 )
 
-var (
-	ErrLocationNotFound = fmt.Errorf("location not found")
-)
+var ErrLocationNotFound = fmt.Errorf("location not found")
 
 type LocationIQClient struct {
 	apiKey string

@@ -96,6 +96,7 @@ func readJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 
 	return nil
 }
+
 func GetCode(err error) int {
 	switch {
 	// 400 Bad Request — неверные данные, формат и т.п.

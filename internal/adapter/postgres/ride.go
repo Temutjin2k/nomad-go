@@ -93,7 +93,6 @@ func (r *RideRepo) Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, err
 		&ride.Pickup.Address, &ride.Pickup.Latitude, &ride.Pickup.Longitude,
 		&ride.Destination.Address, &ride.Destination.Latitude, &ride.Destination.Longitude,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, types.ErrRideNotFound
@@ -134,7 +133,6 @@ func (r *RideRepo) Update(ctx context.Context, ride *models.Ride) error {
 		ride.CompletedAt,
 		ride.CancelledAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("ride repo: Update: %w", err)
 	}
@@ -187,7 +185,6 @@ func (r *RideRepo) UpdateStatus(ctx context.Context, rideID uuid.UUID, status ty
 		rideID,
 		status,
 	)
-
 	if err != nil {
 		return fmt.Errorf("ride repo: UpdateStatus: %w", err)
 	}
@@ -211,7 +208,6 @@ func (r *RideRepo) UpdateMatchedAt(ctx context.Context, rideID uuid.UUID) error 
 	cmdTag, err := q.Exec(ctx, query,
 		rideID,
 	)
-
 	if err != nil {
 		return fmt.Errorf("ride repo: UpdateMatchedAt: %w", err)
 	}
@@ -235,7 +231,6 @@ func (r *RideRepo) UpdateArrivedAt(ctx context.Context, rideID uuid.UUID) error 
 	cmdTag, err := q.Exec(ctx, query,
 		rideID,
 	)
-
 	if err != nil {
 		return fmt.Errorf("ride repo: UpdateMatchedAt: %w", err)
 	}
@@ -246,6 +241,7 @@ func (r *RideRepo) UpdateArrivedAt(ctx context.Context, rideID uuid.UUID) error 
 
 	return nil
 }
+
 func (r *RideRepo) UpdateCompletedAt(ctx context.Context, rideID uuid.UUID) error {
 	q := TxorDB(ctx, r.db)
 
@@ -258,7 +254,6 @@ func (r *RideRepo) UpdateCompletedAt(ctx context.Context, rideID uuid.UUID) erro
 	cmdTag, err := q.Exec(ctx, query,
 		rideID,
 	)
-
 	if err != nil {
 		return fmt.Errorf("ride repo: UpdateMatchedAt: %w", err)
 	}
@@ -268,8 +263,8 @@ func (r *RideRepo) UpdateCompletedAt(ctx context.Context, rideID uuid.UUID) erro
 	}
 
 	return nil
-
 }
+
 func (r *RideRepo) UpdateStartedAt(ctx context.Context, rideID uuid.UUID) error {
 	q := TxorDB(ctx, r.db)
 
@@ -282,7 +277,6 @@ func (r *RideRepo) UpdateStartedAt(ctx context.Context, rideID uuid.UUID) error 
 	cmdTag, err := q.Exec(ctx, query,
 		rideID,
 	)
-
 	if err != nil {
 		return fmt.Errorf("ride repo: UpdateMatchedAt: %w", err)
 	}
@@ -365,7 +359,6 @@ func (r *RideRepo) CheckActiveRideByPassengerID(ctx context.Context, passengerID
 		&ride.Pickup.Address, &ride.Pickup.Latitude, &ride.Pickup.Longitude,
 		&ride.Destination.Address, &ride.Destination.Latitude, &ride.Destination.Longitude,
 	)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

@@ -156,7 +156,6 @@ func (r *DriverRepo) Get(ctx context.Context, driverID uuid.UUID) (*models.Drive
 		&driver.Status,
 		&driver.IsVerified,
 	)
-
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, types.ErrUserNotFound

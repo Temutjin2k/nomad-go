@@ -148,7 +148,6 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 
 		drivers, err := s.searchAvailableDrivers(ctx, req.RideType, loc)
 		if err != nil {
-
 			return false, err
 		}
 
@@ -217,7 +216,6 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 			tick.Reset(interval)
 		}
 	}
-
 }
 
 // HandleRideStatus обрабатывает статусы поездки

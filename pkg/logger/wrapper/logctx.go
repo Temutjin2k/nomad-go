@@ -118,7 +118,6 @@ func WithOfferID(ctx context.Context, offerID string) context.Context {
 		return context.WithValue(ctx, LogCtxKey, lc)
 	}
 	return context.WithValue(ctx, LogCtxKey, LogCtx{OfferID: offerID})
-
 }
 
 func GetRequestID(ctx context.Context) string {

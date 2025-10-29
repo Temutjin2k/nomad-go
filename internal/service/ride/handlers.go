@@ -224,6 +224,7 @@ func (s *RideService) handleDriverEnRoute(ctx context.Context, ride *models.Ride
 
 	return nil
 }
+
 func (s *RideService) handleDriverArrived(ctx context.Context, ride *models.Ride, msg models.DriverStatusUpdateMessage) error {
 	ctx = wrap.WithAction(ctx, "handle_driver_arrived")
 
@@ -235,7 +236,6 @@ func (s *RideService) handleDriverArrived(ctx context.Context, ride *models.Ride
 	}
 
 	if err := s.trm.Do(ctx, func(ctx context.Context) error {
-
 		if err := s.repo.UpdateStatus(ctx, ride.ID, types.StatusArrived); err != nil {
 			return err
 		}

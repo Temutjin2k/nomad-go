@@ -17,10 +17,10 @@ type PassengerLocationUpdateDTO struct {
 }
 
 type PassengerRideStatusUpdateDTO struct {
-	Type string `json:"type"`
-	RideID uuid.UUID `json:"ride_id"`
-	Status string    `json:"status"`
-	RideNumber string `json:"ride_number,omitempty"`
-	Message string `json:"message,omitempty"`
-	CorrelationID string `json:"correlation_id,omitempty"`
+	Type          string    `json:"type"`
+	RideID        uuid.UUID `json:"ride_id"`
+	Status        string    `json:"status"`
+	RideNumber    string    `json:"ride_number,omitempty"`
+	Message       string    `json:"message,omitempty"`
+	CorrelationID string    `json:"correlation_id,omitempty"`
 }
