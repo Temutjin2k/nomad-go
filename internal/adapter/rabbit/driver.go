@@ -146,7 +146,7 @@ func (r *DriverBroker) ConsumeRideRequest(ctx context.Context, fn ConsumeRideHan
 				if !ok {
 					r.l.Warn(ctx, "message channel closed, reconnecting...", "op", op)
 					time.Sleep(2 * time.Second)
-					continue consumeLoop
+					break consumeLoop
 				}
 
 				go r.handleRideRequested(ctx, fn, msg)
@@ -198,7 +198,7 @@ func (r *DriverBroker) ConsumeStatusUpdate(ctx context.Context, fn MatchConfHand
 				if !ok {
 					r.l.Warn(ctx, "message channel closed, reconnecting...", "op", op)
 					time.Sleep(2 * time.Second)
-					continue consumeLoop
+					break consumeLoop
 				}
 
 				// Обрабатываем сообщение
