@@ -11,4 +11,6 @@ var (
 	ErrInvalidToken          = errors.New("invalid token")
 	ErrExpToken              = errors.New("expired token")
 	ErrUserWithEmailNotFound = errors.New("user with this email not found")
+	ErrActionForbidden       = errors.New("action forbidden")
+	ErrUnauthorized          = errors.New("unauthorized")
 )

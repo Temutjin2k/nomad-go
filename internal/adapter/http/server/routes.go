@@ -32,20 +32,20 @@ func (a *API) setupAdminRoutes() {
 
 // setupRideRoutes setups routes for ride service
 func (a *API) setupRideRoutes() {
-	a.mux.HandleFunc("POST /rides", a.routes.ride.CreateRide)                            // Create a new ride request
-	a.mux.HandleFunc("POST /rides/{ride_id}/cancel", a.routes.ride.CancelRide)           // Cancel a ride
-	a.mux.HandleFunc("GET /ws/passengers/{passenger_id}", a.routes.ride.HandleWebSocket) // WebSocket connection for passengers
+	a.mux.Handle("POST /rides", a.m.RequireRoles(a.routes.ride.CreateRide, types.RolePassenger))                  // Create a new ride request
+	a.mux.Handle("POST /rides/{ride_id}/cancel", a.m.RequireRoles(a.routes.ride.CancelRide, types.RolePassenger)) // Cancel a ride
+	a.mux.HandleFunc("GET /ws/passengers/{passenger_id}", a.routes.ride.HandleWebSocket)                          // WebSocket connection for passengers
 }
 
 // setupDriverAndLocationRoutes setups routes for driver and location service
 func (a *API) setupDriverAndLocationRoutes() {
 	a.mux.HandleFunc("POST /drivers", a.routes.driver.Register)
-	a.mux.HandleFunc("POST /drivers/{driver_id}/online", a.routes.driver.GoOnline)         // Driver goes online
-	a.mux.HandleFunc("POST /drivers/{driver_id}/offline", a.routes.driver.GoOffline)       // Driver goes offline
-	a.mux.HandleFunc("POST /drivers/{driver_id}/location", a.routes.driver.UpdateLocation) // Update driver location
-	a.mux.HandleFunc("POST /drivers/{driver_id}/start", a.routes.driver.StartRide)         // Start a ride
-	a.mux.HandleFunc("POST /drivers/{driver_id}/complete", a.routes.driver.CompleteRide)   // Complete a ride
-	a.mux.HandleFunc("GET /ws/drivers/{driver_id}", a.routes.driver.HandleWS)              // WebSocket connection for drivers
+	a.mux.Handle("POST /drivers/{driver_id}/online", a.m.RequireRoles(a.routes.driver.GoOnline, types.RoleDriver))         // Driver goes online
+	a.mux.Handle("POST /drivers/{driver_id}/offline", a.m.RequireRoles(a.routes.driver.GoOffline, types.RoleDriver))       // Driver goes offline
+	a.mux.Handle("POST /drivers/{driver_id}/location", a.m.RequireRoles(a.routes.driver.UpdateLocation, types.RoleDriver)) // Update driver location
+	a.mux.Handle("POST /drivers/{driver_id}/start", a.m.RequireRoles(a.routes.driver.StartRide, types.RoleDriver))         // Start a ride
+	a.mux.Handle("POST /drivers/{driver_id}/complete", a.m.RequireRoles(a.routes.driver.CompleteRide, types.RoleDriver))   // Complete a ride
+	a.mux.HandleFunc("GET /ws/drivers/{driver_id}", a.routes.driver.HandleWS)                                              // WebSocket connection for drivers
 }
 
 func (a *API) SetupAuthRoutes() {
