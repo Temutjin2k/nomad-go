@@ -55,13 +55,13 @@ func (r *RideRepo) Create(ctx context.Context, ride *models.Ride) (*models.Ride,
 	return ride, nil
 }
 
-func (r *RideRepo) CountByDate(ctx context.Context, date time.Time) (int, error) {
+func (r *RideRepo) CountByDate(ctx context.Context) (int, error) {
 	q := TxorDB(ctx, r.db)
 
 	var count int
-	query := "SELECT COUNT(*) FROM rides WHERE DATE(created_at) = $1;"
+	query := "SELECT COUNT(*) FROM rides WHERE DATE(created_at) = CURRENT_DATE;"
 
-	err := q.QueryRow(ctx, query, date.Format("2006-01-02")).Scan(&count)
+	err := q.QueryRow(ctx, query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("ride repo: CountByDate: %w", err)
 	}
@@ -328,7 +328,7 @@ func (r *RideRepo) GetDetails(ctx context.Context, rideID uuid.UUID) (*models.Ri
 	query := `
 		SELECT 
     		r.id AS ride_id,
-			COALESCE(r.driver_id, ''::uuid) AS driver_id,
+			r.driver_id AS driver_id,
     		u.attrs->>'name' AS passenger_name,
     		u.attrs->>'phone' AS passenger_phone,
     		c.latitude AS pickup_latitude,
@@ -339,7 +339,7 @@ func (r *RideRepo) GetDetails(ctx context.Context, rideID uuid.UUID) (*models.Ri
 		WHERE r.id = $1;`
 
 	var details models.RideDetails
-	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, rideID).Scan(&details.RideID, &details.DriverID, &details.Passenger.Name, &details.Passenger.Phone, &details.PickupLocation.Latitude, &details.PickupLocation.Longitude); err != nil {
+	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, rideID).Scan(&details.RideID, &details.DriverID, &details.Name, &details.Phone, &details.PickupLocation.Latitude, &details.PickupLocation.Longitude); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, types.ErrRideNotFound
 		}

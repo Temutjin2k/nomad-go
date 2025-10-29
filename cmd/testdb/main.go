@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/config"
+	"github.com/Temutjin2k/ride-hail-system/internal/adapter/postgres"
 	"github.com/Temutjin2k/ride-hail-system/pkg/hasher"
-	"github.com/Temutjin2k/ride-hail-system/pkg/postgres"
+	pgclient "github.com/Temutjin2k/ride-hail-system/pkg/postgres"
+	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -27,12 +30,27 @@ func main() {
 		log.Fatal(err)
 	}
 
-	client, err := postgres.New(ctx, cfg.Database)
+	client, err := pgclient.New(ctx, cfg.Database)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	migrateDefaultUsers(client.Pool)
+}
+
+func GetRideDetails(db *pgxpool.Pool) {
+	rideRepo := postgres.NewRideRepo(db)
+
+	id, err := uuid.Parse("96ab18a1-5bb1-45ca-bce9-dffc240b9eb5")
+	if err != nil {
+		log.Fatal(err)
+	}
+	ride, err := rideRepo.GetDetails(context.Background(), id)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(ride)
 }
 
 func migrateDefaultUsers(db *pgxpool.Pool) {

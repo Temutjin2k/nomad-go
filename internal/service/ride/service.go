@@ -41,6 +41,7 @@ func NewRideService(repo RideRepo, calculate ridecalc.Calculator, trm trm.TxMana
 	}
 }
 
+// Create создает новую поездку
 func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ride, error) {
 	ctx = wrap.WithAction(wrap.WithPassengerID(ctx, ride.PassengerID.String()), "create_ride")
 
@@ -133,12 +134,13 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		defer cancel()
 		// Start a goroutine to handle the driver's response
 		if err := s.publisher.ConsumeDriverResponse(ctx, createdRide.ID, s.HandleDriverResponse); err != nil {
-			s.logger.Error(ctx, "failed to consume driver response", err)
+			ctxx := wrap.WithLogCtx(context.Background(), wrap.GetLogCtx(ctx))
+			s.logger.Error(ctxx, "failed to consume driver response", err)
 
 			// cancel the ride
-			_, err := s.Cancel(ctx, createdRide.ID, "failed to find a driver")
+			_, err := s.Cancel(ctxx, createdRide.ID, "failed to find a driver")
 			if err != nil {
-				s.logger.Error(ctx, "failed to cancel ride", err)
+				s.logger.Error(ctxx, "failed to cancel ride", err)
 			}
 
 			data := models.StatusUpdateWebSocketMessage{
@@ -147,8 +149,8 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 			}
 
 			// notify via websocket
-			if err := s.passengerSender.SendToPassenger(ctx, createdRide.PassengerID, data); err != nil {
-				s.logger.Error(ctx, "failed to notify passenger about ride cancelation", err)
+			if err := s.passengerSender.SendToPassenger(ctxx, createdRide.PassengerID, data); err != nil {
+				s.logger.Error(ctxx, "failed to notify passenger about ride cancelation", err)
 			}
 		}
 	}()
@@ -198,7 +200,7 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 		Status:        cancelledRide.Status,
 		Timestamp:     *cancelledRide.CancelledAt,
 		DriverID:      cancelledRide.DriverID,
-		CorrelationID: cancelledRide.RideNumber,
+		CorrelationID: wrap.GetRequestID(ctx),
 	}
 
 	if err := s.publisher.PublishRideStatus(ctx, message); err != nil {

@@ -73,7 +73,7 @@ type Publisher interface {
 /*===========================Sender===============================*/
 
 type DriverCommunicator interface {
-	SendRideOffer(ctx context.Context, driverID uuid.UUID, offer models.RideOffer) (bool, error)
+	GetRideOffer(ctx context.Context, driverID uuid.UUID, offer models.RideOffer) (bool, error)
 	SendRideDetails(ctx context.Context, details models.RideDetails) error
 	ListenLocationUpdates(ctx context.Context, driverID, rideID uuid.UUID, handler func(ctx context.Context, location models.RideLocationUpdate) error) error
 }

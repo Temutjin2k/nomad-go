@@ -24,8 +24,7 @@ type Driver struct {
 	wsConnections *wshub.ConnectionHub
 	auth          TokenValidator
 
-	ctx context.Context
-	l   logger.Logger
+	l logger.Logger
 }
 
 type DriverServiceOptions struct {
@@ -52,13 +51,12 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func NewDriver(ctx context.Context, l logger.Logger, option *DriverServiceOptions) *Driver {
+func NewDriver(l logger.Logger, option *DriverServiceOptions) *Driver {
 	return &Driver{
 		service:       option.Service,
 		wsConnections: option.WsConnections,
 		auth:          option.Auth,
 		l:             l,
-		ctx:           ctx,
 	}
 }
 func (h *Driver) Register(w http.ResponseWriter, r *http.Request) {
@@ -410,7 +408,7 @@ func (h *Driver) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn := wshub.NewConn(ctx, driver.ID, wsConn, h.l)
+	conn := wshub.NewConn(driver.ID, wsConn, h.l)
 	if err := h.wsConnections.Add(conn); err != nil {
 		h.l.Error(ctx, "failed to register WS connection", err)
 		wsConn.WriteJSON(map[string]any{"error": "failed to register"})
@@ -444,7 +442,7 @@ func (h *Driver) HandleWS(w http.ResponseWriter, r *http.Request) {
 //
 //	{"type":"auth","token":"Bearer <jwt>"}
 //
-// It validates the JWT via RideService and returns the passenger UUID.
+// It validates the JWT via RideService and returns the driver UUID.
 // On any error, it sends an appropriate WebSocket close frame and closes the connection.
 func (h *Driver) wsAuthenticate(ctx context.Context, conn *websocket.Conn, driver uuid.UUID) (*models.User, error) {
 	const authTimeout = 5 * time.Second
@@ -515,18 +513,36 @@ func (h *Driver) wsAuthenticate(ctx context.Context, conn *websocket.Conn, drive
 	// Validate the token and get the driverInfo info
 	driverInfo, err := h.auth.RoleCheck(ctx, req.Token)
 	if err != nil {
+		h.l.Error(ctx, "invalid token", err)
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid token"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return nil, err
+	}
+
+	if driverInfo == nil {
+		h.l.Error(ctx, "driver not found", err)
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "driver not found"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
 		return nil, err
 	}
 
 	if driverInfo.ID != driver {
-		h.l.Error(ctx, "passenger ID mismatch", errors.New("passenger ID does not match token"))
+		h.l.Error(ctx, "driver ID mismatch", errors.New("driver ID does not match token"))
 		_ = conn.WriteControl(
 			websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "passenger ID does not match token"),
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "driver ID does not match token"),
 			time.Now().Add(time.Second),
 		)
 		_ = conn.Close()
-		return nil, errors.New("passenger ID mismatch")
+		return nil, errors.New("driver ID mismatch")
 	}
 
 	// Auth succeeded; clear the read deadline for normal operation.
@@ -543,8 +559,7 @@ func (h *Driver) wsAuthenticate(ctx context.Context, conn *websocket.Conn, drive
 
 	// Send an explicit acknowledgment so the client can transition its state machine.
 	ack := dto.AuthWebSocketResp{
-		Type:        "auth_ok",
-		PassengerID: driverInfo.ID.String(),
+		Type: "auth_ok",
 	}
 	if err := conn.WriteJSON(ack); err != nil {
 		h.l.Error(ctx, "failed to send auth_ok", err)

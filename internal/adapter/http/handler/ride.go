@@ -182,7 +182,7 @@ func (h *Ride) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn := wshub.NewConn(ctx, passenger.ID, wsConn, h.l)
+	conn := wshub.NewConn(passenger.ID, wsConn, h.l)
 	if err := h.wsConnections.Add(conn); err != nil {
 		h.l.Error(ctx, "failed to register WS connection", err)
 		wsConn.WriteJSON(map[string]any{"error": "failed to register"})
@@ -286,6 +286,24 @@ func (h *Ride) wsAuthenticate(ctx context.Context, conn *websocket.Conn, passeng
 	// Validate the token and get the passenger info
 	passenger, err := h.auth.RoleCheck(ctx, req.Token)
 	if err != nil {
+		h.l.Error(ctx, "invalid token", err)
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid token"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
+		return nil, err
+	}
+
+	if passenger == nil {
+		h.l.Error(ctx, "passenger not found", err)
+		_ = conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "passenger not found"),
+			time.Now().Add(time.Second),
+		)
+		_ = conn.Close()
 		return nil, err
 	}
 
@@ -314,8 +332,7 @@ func (h *Ride) wsAuthenticate(ctx context.Context, conn *websocket.Conn, passeng
 
 	// Send an explicit acknowledgment so the client can transition its state machine.
 	ack := dto.AuthWebSocketResp{
-		Type:        "auth_ok",
-		PassengerID: passenger.ID.String(),
+		Type: "auth_ok",
 	}
 	if err := conn.WriteJSON(ack); err != nil {
 		h.l.Error(ctx, "failed to send auth_ok", err)

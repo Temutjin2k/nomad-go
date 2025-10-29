@@ -39,6 +39,14 @@ type (
 		User     string `env:"DATABASE_USER" default:"ridehail_user"`
 		Password string `env:"DATABASE_PASSWORD" default:"ridehail_pass"`
 		Database string `env:"DATABASE_DATABASE" default:"ridehail_db"`
+
+		MaxOpenConns int32  `env:"DATABASE_MAXOPENCONN" default:"25"`
+		MaxIdleTime  string `env:"DATABASE_MAXIDLETIME" default:"15m"`
+
+		MaxConns        int32         `env:"DATABASE_MAXCONNS" default:"20"`         // максимум открытых соединений
+		MinConns        int32         `env:"DATABASE_MINCONNS" default:"2"`          // минимум соединений в пуле
+		MaxConnLifetime time.Duration `env:"DATABASE_MAXCONNLIFETIME" default:"30m"` // макс. "время жизни" соединения
+		MaxConnIdleTime time.Duration `env:"DATABASE_MAXCONNIDLETIME" default:"5m"`  // макс. "время простоя" соединения
 	}
 
 	ExternalAPIConfig struct {

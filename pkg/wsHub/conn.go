@@ -30,8 +30,8 @@ type Conn struct {
 	l      logger.Logger
 }
 
-func NewConn(parent context.Context, entityID uuid.UUID, conn *websocket.Conn, l logger.Logger) *Conn {
-	ctx, cancel := context.WithCancel(parent)
+func NewConn(entityID uuid.UUID, conn *websocket.Conn, l logger.Logger) *Conn {
+	ctx, cancel := context.WithCancel(context.Background())
 
 	c := &Conn{
 		conn:        conn,

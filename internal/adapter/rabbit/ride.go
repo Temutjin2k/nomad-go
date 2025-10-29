@@ -187,7 +187,7 @@ func (r *RideBroker) ConsumeDriverStatusUpdate(ctx context.Context, handler Driv
 					ctxx := wrap.WithRequestID(ctx, d.CorrelationId)
 
 					if err := handler(ctxx, req); err != nil {
-						r.l.Error(wrap.ErrorCtx(ctx, err), "failed to handle driver response", err)
+						r.l.Error(wrap.ErrorCtx(ctx, err), "failed to handle driver status update", err)
 
 						// если ошибка восстановимая, повторно помещаем в очередь
 						if isRecoverableError(err) {

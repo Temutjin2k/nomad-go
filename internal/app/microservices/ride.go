@@ -83,15 +83,15 @@ func NewRide(ctx context.Context, cfg config.Config, log logger.Logger) (*RideSe
 	trm := trm.New(postgresDB.Pool)
 	calculator := ridecalc.New()
 
-	hub := ws.NewConnHub(log)
-	wsRide := wshandler.NewRideWsHandler(hub)
+	wsHub := ws.NewConnHub(log)
+	wsRide := wshandler.NewRideWsHandler(wsHub)
 
 	rideService := ridego.NewRideService(rideRepo, calculator, trm, rabbitRideBroker, wsRide, eventRepo, log)
 	tokenSvc := auth.NewTokenService(cfg.Auth.JWTSecret, userRepo, refreshTokenRepo, trm, cfg.Auth.RefreshTokenTTL, cfg.Auth.AccessTokenTTL, log)
 	authSvc := auth.NewAuthService(userRepo, tokenSvc, log)
 
 	// init http server
-	httpServer, err := httpserver.New(ctx, cfg, nil, rideService, nil, authSvc, log)
+	httpServer, err := httpserver.New(ctx, cfg, nil, rideService, nil, authSvc, wsHub, log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup http server: %w", err)
 	}
@@ -142,13 +142,15 @@ func (s *RideService) close(ctx context.Context) {
 		}
 	}
 
-	if s.postgresDB != nil && s.postgresDB.Pool != nil {
-		s.postgresDB.Pool.Close()
-	}
+	fmt.Println("closing postgres")
 
+	s.postgresDB.Pool.Close()
+
+	fmt.Println("closing rabbit")
 	if s.rabbitMQ != nil {
 		if err := s.rabbitMQ.Close(ctx); err != nil {
 			s.log.Warn(ctx, "failed to close rabbitmq connection", "error", err.Error())
 		}
 	}
+	fmt.Println("closed everything")
 }

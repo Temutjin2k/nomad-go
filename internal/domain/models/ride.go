@@ -114,8 +114,10 @@ type RideOfferResponse struct {
 }
 
 type RideDetails struct {
-	MsgType  string    `json:"type"` // // By default must be: "ride_details"
-	RideID   uuid.UUID `json:"ride_id"`
-	DriverID uuid.UUID `json:"driver_id"`
-	Passenger
+	MsgType        string     `json:"type"` // // By default must be: "ride_details"
+	RideID         uuid.UUID  `json:"ride_id"`
+	DriverID       *uuid.UUID `json:"driver_id"`
+	Name           *string    `json:"passenger_name"`
+	Phone          *string    `json:"passenger_phone"`
+	PickupLocation Location   `json:"pickup_location"`
 }

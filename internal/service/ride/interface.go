@@ -3,7 +3,6 @@ package ride
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/rabbit"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
@@ -22,7 +21,7 @@ type (
 		UpdateCompletedAt(ctx context.Context, rideID uuid.UUID) error
 		UpdateStartedAt(ctx context.Context, rideID uuid.UUID) error
 		// для генерации уникального номера поездки (ride_number)
-		CountByDate(ctx context.Context, date time.Time) (int, error)
+		CountByDate(ctx context.Context) (int, error)
 
 		// проверить, есть ли у пассажира активная поездка
 		CheckActiveRideByPassengerID(ctx context.Context, passengerID uuid.UUID) (*models.Ride, error)

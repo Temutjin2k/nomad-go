@@ -229,17 +229,17 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location mod
 			return fmt.Errorf("failed to insert new coordinate data: %w", err)
 		}
 
-		// Publish driver status
-		if err := s.infra.publisher.PublishDriverStatus(
-			ctx,
-			models.DriverStatusUpdateMessage{
-				DriverID:  driverID,
-				Status:    types.StatusDriverAvailable.String(),
-				Timestamp: now,
-				RideID:    nil,
-			}); err != nil {
-			return fmt.Errorf("failed to publish driver status: %w", err)
-		}
+		// // Publish driver status
+		// if err := s.infra.publisher.PublishDriverStatus(
+		// 	ctx,
+		// 	models.DriverStatusUpdateMessage{
+		// 		DriverID:  driverID,
+		// 		Status:    types.StatusDriverAvailable.String(),
+		// 		Timestamp: now,
+		// 		RideID:    nil,
+		// 	}); err != nil {
+		// 	return fmt.Errorf("failed to publish driver status: %w", err)
+		// }
 
 		return nil
 	}
@@ -260,8 +260,6 @@ func (s *Service) GoOffline(ctx context.Context, driverID uuid.UUID) (models.Ses
 
 	var summary models.SessionSummary
 	fn := func(ctx context.Context) error {
-		now := time.Now()
-
 		// Check if driver exists in DB
 		exist, err := s.repos.driver.IsDriverExist(ctx, driverID)
 		if err != nil {
@@ -297,16 +295,16 @@ func (s *Service) GoOffline(ctx context.Context, driverID uuid.UUID) (models.Ses
 		}
 
 		// Publish driver status
-		if err := s.infra.publisher.PublishDriverStatus(
-			ctx,
-			models.DriverStatusUpdateMessage{
-				DriverID:  driverID,
-				Status:    types.StatusDriverOffline.String(),
-				Timestamp: now,
-				RideID:    nil,
-			}); err != nil {
-			return fmt.Errorf("failed to publish driver status: %w", err)
-		}
+		// if err := s.infra.publisher.PublishDriverStatus(
+		// 	ctx,
+		// 	models.DriverStatusUpdateMessage{
+		// 		DriverID:  driverID,
+		// 		Status:    types.StatusDriverOffline.String(),
+		// 		Timestamp: now,
+		// 		RideID:    nil,
+		// 	}); err != nil {
+		// 	return fmt.Errorf("failed to publish driver status: %w", err)
+		// }
 
 		return nil
 	}
@@ -530,12 +528,6 @@ func (s *Service) UpdateLocation(ctx context.Context, data models.RideLocationUp
 
 	if err := s.infra.trm.Do(ctx, fn); err != nil {
 		return uuid.UUID{}, wrap.Error(ctx, err)
-	}
-
-	// записываем ивент
-	eventData, _ := json.Marshal(data) // non fatal event so just ignore error
-	if err := s.repos.eventRepo.CreateEvent(ctx, *data.RideID, types.EventLocationUpdated, eventData); err != nil {
-		s.l.Warn(ctx, "failed to create ride event", "event_type", types.EventLocationUpdated, "error", err.Error())
 	}
 
 	return coordinateID, nil

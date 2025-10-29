@@ -2,9 +2,7 @@ package wshandler
 
 import (
 	"context"
-	"fmt"
 
-	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 	ws "github.com/Temutjin2k/ride-hail-system/pkg/wsHub"
 )
@@ -19,15 +17,15 @@ func NewRideWsHandler(connections *ws.ConnectionHub) *RideWsHandler {
 	}
 }
 
+// SendToPassenger
 func (h *RideWsHandler) SendToPassenger(ctx context.Context, passengerID uuid.UUID, data any) error {
-	ctx = wrap.WithAction(ctx, "ws_send_to_passenger")
 	conn, err := h.connections.GetConn(passengerID)
 	if err != nil {
-		return wrap.Error(ctx, err)
+		return err
 	}
 
 	if err := conn.Send(data); err != nil {
-		return wrap.Error(ctx, fmt.Errorf("failed to send driver location to passenger:%w", err))
+		return err
 	}
 
 	return nil

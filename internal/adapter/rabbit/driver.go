@@ -210,7 +210,7 @@ func (r *DriverBroker) ConsumeStatusUpdate(ctx context.Context, fn MatchConfHand
 
 					// Вызов обработчика
 					if err := fn(ctxx, req); err != nil {
-						r.l.Error(ctx, "handler failed", err, "op", op)
+						r.l.Error(ctx, "failed to handle status update", err, "op", op)
 						_ = msg.Nack(false, false)
 						return
 					}
@@ -238,7 +238,7 @@ func (r *DriverBroker) handleRideRequested(ctx context.Context, fn ConsumeRideHa
 
 	// Вызываем бизнес-обработчик
 	if err := fn(ctxx, req); err != nil {
-		r.l.Error(ctx, "handler failed", err)
+		r.l.Error(ctx, "failed to handle ride request", err)
 
 		// Если водителей нет — это не ошибка, просто игнор
 		if errors.Is(err, types.ErrDriversNotFound) || errors.Is(err, types.ErrDriverSearchTimeout) {

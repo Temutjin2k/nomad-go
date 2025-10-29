@@ -74,7 +74,7 @@ func (s *Service) offerRideToDriver(ctx context.Context, correlationID string, d
 	s.l.Info(ctx, "sending offer to driver")
 	offer.DistanceToPickupKm = driver.DistanceKm
 
-	accepted, err := s.infra.communicator.SendRideOffer(ctx, driver.ID, offer)
+	accepted, err := s.infra.communicator.GetRideOffer(ctx, driver.ID, offer)
 	if err != nil {
 		s.l.Debug(ctx, "failed to send ride offer", "error", err)
 		return false, nil // игнорируем ошибки отправки для поиска других водителей
@@ -115,16 +115,16 @@ func (s *Service) offerRideToDriver(ctx context.Context, correlationID string, d
 			return err
 		}
 
-		// Publish driver status update
-		if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
-			DriverID:  driver.ID,
-			Status:    types.StatusDriverBusy.String(),
-			Timestamp: time.Now(),
-			RideID:    &offer.RideID,
-		}); err != nil {
-			s.l.Error(ctx, "failed to publish driver status", err)
-			return err
-		}
+		// // Publish driver status update
+		// if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
+		// 	DriverID:  driver.ID,
+		// 	Status:    types.StatusDriverBusy.String(),
+		// 	Timestamp: time.Now(),
+		// 	RideID:    &offer.RideID,
+		// }); err != nil {
+		// 	s.l.Error(ctx, "failed to publish driver status", err)
+		// 	return err
+		// }
 		return nil
 	}); err != nil {
 		return false, err
@@ -136,9 +136,18 @@ func (s *Service) offerRideToDriver(ctx context.Context, correlationID string, d
 
 // Основной цикл поиска водителя с тикером и таймером
 func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRequestedMessage, offer models.RideOffer) error {
-	timer := time.NewTimer(time.Minute * 2) // время поиска водителя
-	tick := time.NewTicker(5 * time.Second) // частота поиска водителя
-	defer timer.Stop()
+	// общий таймаут поиска
+	searchTimeout := 2 * time.Minute
+	// интервал между попытками (отсчитывается после каждой попытки)
+	interval := 5 * time.Second
+
+	timeout := time.NewTimer(searchTimeout)
+	defer timeout.Stop()
+
+	// timer для интервальных попыток, стартуем, но будем сбрасывать после первой итерации
+	tick := time.NewTimer(interval)
+	// если хотим, чтобы первая попытка была немедленной — можно остановить tick сейчас,
+	// а потом Reset после первой попытки. Но здесь мы просто сбросим его после первой попытки.
 	defer tick.Stop()
 
 	trySearch := func() (bool, error) {
@@ -150,6 +159,7 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 
 		drivers, err := s.searchAvailableDrivers(ctx, req.RideType, loc)
 		if err != nil {
+
 			return false, err
 		}
 
@@ -165,32 +175,60 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 	// Первая попытка сразу
 	accepted, err := trySearch()
 	if err != nil {
-		return wrap.Error(ctx, err)
+		s.l.Warn(ctx, "driver first search attempt failed", "error", err)
 	}
 	if accepted {
 		return nil
 	}
 
+	// Так как мы уже сделали первую попытку, нужно сбросить tick (отсчитать интервал заново).
+	// Если timer ещё не истёк — безопасно остановим и сбросим.
+	if !tick.Stop() {
+		// Если канал уже сработал и значение ещё не прочитано — прочитаем его, чтобы не заблокировать Reset.
+		select {
+		case <-tick.C:
+		default:
+		}
+	}
+	tick.Reset(interval)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("driver search stop: (ctx Done)")
-		case <-timer.C: // время поиска водителя
+		case <-timeout.C:
 			return types.ErrDriverSearchTimeout
-		case <-tick.C: // частота поиска водителя
+		case <-tick.C:
 			accepted, err := trySearch()
 			if err != nil {
-				if errors.Is(err, types.ErrDriversNotFound) {
-					s.l.Warn(ctx, "Drivers are not found")
-					continue
+				s.l.Warn(ctx, fmt.Sprintf("driver search attempt failed: %v", err))
+
+				// Просто продолжаем искать — сбрасываем интервал и идём дальше
+				if !tick.Stop() {
+					select {
+					case <-tick.C:
+					default:
+					}
 				}
-				return wrap.Error(ctx, err)
+				tick.Reset(interval)
+				continue
 			}
+
 			if accepted {
 				return nil
 			}
+
+			// Не найдено — сбрасываем интервал и продолжаем
+			if !tick.Stop() {
+				select {
+				case <-tick.C:
+				default:
+				}
+			}
+			tick.Reset(interval)
 		}
 	}
+
 }
 
 // HandleRideStatus обрабатывает статусы поездки
@@ -207,6 +245,9 @@ func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpd
 			return wrap.Error(ctx, err)
 		}
 
+		if ride.DriverID == nil {
+			return errors.New("driver id not found")
+		}
 		req.DriverID = ride.DriverID
 	}
 
@@ -247,14 +288,14 @@ func (s *Service) cancelRide(ctx context.Context, driverID, rideID uuid.UUID) er
 			return fmt.Errorf("failed to change driver status to available after ride cancellation: %w", err)
 		}
 
-		if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
-			DriverID:  driverID,
-			Status:    types.StatusDriverAvailable.String(),
-			Timestamp: time.Now(),
-			RideID:    &rideID,
-		}); err != nil {
-			return fmt.Errorf("failed to publish driver status after ride cancellation: %w", err)
-		}
+		// if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
+		// 	DriverID:  driverID,
+		// 	Status:    types.StatusDriverAvailable.String(),
+		// 	Timestamp: time.Now(),
+		// 	RideID:    &rideID,
+		// }); err != nil {
+		// 	return fmt.Errorf("failed to publish driver status after ride cancellation: %w", err)
+		// }
 		return nil
 	})
 }
@@ -267,7 +308,9 @@ func (s *Service) processMatchedRide(ctx context.Context, driverID, rideID uuid.
 			return fmt.Errorf("failed to get ride: %w", err)
 		}
 
-		if _, err := s.repos.driver.ChangeStatus(ctx, details.DriverID, types.StatusDriverEnRoute); err != nil {
+		details.DriverID = &driverID
+
+		if _, err := s.repos.driver.ChangeStatus(ctx, driverID, types.StatusDriverEnRoute); err != nil {
 			return fmt.Errorf("failed to change driver status: %w", err)
 		}
 

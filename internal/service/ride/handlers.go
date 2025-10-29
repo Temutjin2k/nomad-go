@@ -10,12 +10,13 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
-	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 )
 
 // HandleDriverResponse processes driver match responses.
 func (s *RideService) HandleDriverResponse(ctx context.Context, msg models.DriverMatchResponse) error {
 	ctx = wrap.WithAction(wrap.WithRequestID(wrap.WithRideID(ctx, msg.RideID.String()), msg.CorrelationID), "handle_driver_response")
+
+	s.logger.Debug(ctx, "HandleDriverResponse")
 
 	// if not accepted
 	if !msg.Accepted {
@@ -23,50 +24,45 @@ func (s *RideService) HandleDriverResponse(ctx context.Context, msg models.Drive
 		return s.handleNotAccepted(ctx, msg)
 	}
 
-	var passengerID uuid.UUID
-	// if accepted
-	if err := s.trm.Do(ctx, func(ctx context.Context) error {
-		ride, err := s.repo.Get(ctx, msg.RideID)
-		if err != nil {
-			return err
-		}
+	ride, err := s.repo.Get(ctx, msg.RideID)
+	if err != nil {
+		return wrap.Error(ctx, fmt.Errorf("failed to get ride: %w", err))
+	}
 
-		if ride == nil {
-			return types.ErrRideNotFound
-		}
+	if ride == nil {
+		return wrap.Error(ctx, types.ErrRideNotFound)
+	}
 
-		if ride.Status != types.StatusRequested.String() {
-			s.logger.Warn(ctx, "status already changed", "current_status", ride.Status)
-			return types.ErrInvalidRideStatus
-		}
+	if ride.Status != types.StatusRequested.String() {
+		s.logger.Warn(ctx, "status already changed", "current_status", ride.Status, "expected_status", types.StatusRequested)
+		return wrap.Error(ctx, types.ErrInvalidRideStatus)
+	}
 
-		if err := s.repo.DriverMatchedForRide(ctx, ride.ID, msg.DriverID, ride.EstimatedFare); err != nil {
-			return fmt.Errorf("failed to update ride status: %w", err)
-		}
-		ride.Status = types.StatusMatched.String()
-		ride.DriverID = &msg.DriverID
+	// Изменяем статус поездки на matched, добавляем driver_id
+	if err := s.repo.DriverMatchedForRide(ctx, ride.ID, msg.DriverID, ride.EstimatedFare); err != nil {
+		return wrap.Error(ctx, fmt.Errorf("failed to update ride status: %w", err))
+	}
 
-		message := models.RideStatusUpdateMessage{
-			RideID:        ride.ID,
-			Status:        ride.Status,
-			Timestamp:     ride.CreatedAt,
-			DriverID:      ride.DriverID,
-			CorrelationID: ride.RideNumber,
-		}
+	message := models.RideStatusUpdateMessage{
+		RideID:        ride.ID,
+		Status:        types.StatusMatched.String(),
+		Timestamp:     time.Now(),
+		DriverID:      &msg.DriverID,
+		CorrelationID: wrap.GetRequestID(ctx),
+	}
 
-		if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
-			return err
-		}
+	if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
+		return wrap.Error(ctx, fmt.Errorf("failed to publish ride status: %w", err))
+	}
 
-		passengerID = ride.PassengerID
+	data := models.StatusUpdateWebSocketMessage{
+		EventType: types.EventDriverMatched,
+		Data:      msg,
+	}
 
-		if err := s.passengerSender.SendToPassenger(ctx, passengerID, msg); err != nil {
-			return err
-		}
-
-		return nil
-	}); err != nil {
-		return wrap.Error(ctx, err)
+	// Уведомляем пассажира по вебсокету
+	if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, data); err != nil {
+		s.logger.Warn(ctx, "failed to notify passenger about driver matching", "event_type", types.EventDriverMatched, "error", err.Error())
 	}
 
 	// записываем ивент
@@ -86,74 +82,72 @@ func (s *RideService) handleNotAccepted(ctx context.Context, msg models.DriverMa
 }
 
 func (s *RideService) HandleDriverLocationUpdate(ctx context.Context, msg models.RideLocationUpdate) error {
-	ctx = wrap.WithAction(wrap.WithRideID(ctx, msg.RideID.String()), "handle_driver_location_update")
+	ctx = wrap.WithAction(wrap.WithDriverID(ctx, msg.DriverID.String()), "handle_driver_location_update")
+
+	s.logger.Debug(ctx, "HandleDriverLocationUpdate")
 
 	if msg.RideID == nil {
 		s.logger.Warn(ctx, "ride_id not provided")
 		return nil
 	}
 
-	var (
-		PassengerID uuid.UUID
-		wsMessage   models.PassengerLocationUpdateDTO
-	)
-
-	if err := s.trm.Do(ctx, func(ctx context.Context) error {
-		ride, err := s.repo.Get(ctx, *msg.RideID)
-		if err != nil {
-			return err
-		}
-		if ride == nil {
-			return types.ErrNotFound
-		}
-
-		switch ride.Status {
-		case types.StatusMatched.String(), types.StatusEnRoute.String(), types.StatusArrived.String(), types.StatusInProgress.String():
-			// Поездка активна, продолжаем и отправляем обновление
-		default:
-			// Поездка завершена, отменена или еще не началась. Игнорируем.
-			s.logger.Info(ctx, "skipping location update for inactive ride", "status", ride.Status)
-			return nil
-		}
-
-		//  Определяем, куда едет водитель (к пассажиру или к месту назначения)
-		var targetLocation models.Location
-		if ride.Status == types.StatusInProgress.String() {
-			targetLocation = ride.Destination
-		} else {
-			targetLocation = ride.Pickup
-		}
-
-		// (Опционально) Рассчитываем оставшееся расстояние и время
-		driverCurrentLocation := models.Location{
-			Latitude:  msg.Location.Latitude,
-			Longitude: msg.Location.Longitude,
-		}
-
-		distanceKm := s.calculate.Distance(driverCurrentLocation, targetLocation)
-		durationMin := s.calculate.Duration(distanceKm)
-
-		// 5. Формируем сообщение для WebSocket
-		wsMessage = models.PassengerLocationUpdateDTO{
-			Type:   types.EventLocationUpdated.String(),
-			RideID: ride.ID,
-			DriverLocation: models.Location{
-				Latitude:  msg.Location.Latitude,
-				Longitude: msg.Location.Longitude,
-			},
-			DistanceToPickupKm: distanceKm,
-			EstimatedArrival:   time.Now().Add(time.Duration(durationMin) * time.Minute),
-		}
-		PassengerID = ride.PassengerID
-		return nil
-	}); err != nil {
+	// Get ride
+	ride, err := s.repo.Get(ctx, *msg.RideID)
+	if err != nil {
 		return err
 	}
+	if ride == nil {
+		return types.ErrNotFound
+	}
+	ctx = wrap.WithPassengerID(ctx, ride.PassengerID.String())
 
-	if err := s.passengerSender.SendToPassenger(ctx, PassengerID, wsMessage); err != nil {
-		// Это не фатальная ошибка, мы не должны NACK'ать сообщение в RabbitMQ.
-		// Пассажир просто пропустит одно обновление координат.
-		s.logger.Warn(ctx, "failed to send websocket location update to passenger", "error", err, "passenger_id", PassengerID)
+	switch ride.Status {
+	case types.StatusMatched.String(), types.StatusEnRoute.String(), types.StatusArrived.String(), types.StatusInProgress.String():
+		// Поездка активна, продолжаем и отправляем обновление
+	default:
+		// Поездка завершена, отменена или еще не началась. Игнорируем.
+		s.logger.Info(ctx, "skipping location update for inactive ride", "status", ride.Status)
+		return nil
+	}
+
+	//  Определяем, куда едет водитель (к пассажиру или к месту назначения)
+	var targetLocation models.Location
+	if ride.Status == types.StatusInProgress.String() {
+		targetLocation = ride.Destination
+	} else {
+		targetLocation = ride.Pickup
+	}
+
+	// (Опционально) Рассчитываем оставшееся расстояние и время
+	driverCurrentLocation := models.Location{
+		Latitude:  msg.Location.Latitude,
+		Longitude: msg.Location.Longitude,
+	}
+
+	distanceKm := s.calculate.Distance(driverCurrentLocation, targetLocation)
+	durationMin := s.calculate.Duration(distanceKm)
+
+	// 5. Формируем сообщение для WebSocket
+	wsMessage := models.PassengerLocationUpdateDTO{
+		Type:   types.EventLocationUpdated.String(),
+		RideID: ride.ID,
+		DriverLocation: models.Location{
+			Latitude:  msg.Location.Latitude,
+			Longitude: msg.Location.Longitude,
+		},
+		DistanceToPickupKm: distanceKm,
+		EstimatedArrival:   time.Now().Add(time.Duration(durationMin) * time.Minute),
+	}
+
+	// записываем ивент
+	eventData, _ := json.Marshal(wsMessage) // non fatal event so just ignore error
+	if err := s.eventRepo.CreateEvent(ctx, ride.ID, types.EventLocationUpdated, eventData); err != nil {
+		s.logger.Warn(ctx, "failed to create ride event", "event_type", types.EventLocationUpdated, "error", err.Error())
+	}
+
+	if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
+		s.logger.Warn(ctx, "failed to send a driver location update to passenger via websocket", "error", err)
+		return wrap.Error(ctx, err)
 	}
 
 	return nil
@@ -163,21 +157,18 @@ func (s *RideService) HandleDriverLocationUpdate(ctx context.Context, msg models
 func (s *RideService) HandleDriverStatusUpdate(ctx context.Context, msg models.DriverStatusUpdateMessage) error {
 	ctx = wrap.WithAction(ctx, "handle_driver_status_update")
 
+	s.logger.Debug(ctx, "HandleDriverStatusUpdate")
+
 	if msg.RideID == nil {
 		return wrap.Error(ctx, errors.New("ride_id not provided"))
 	}
 
 	ride, err := s.repo.Get(ctx, *msg.RideID)
 	if err != nil {
-		return wrap.Error(ctx, err)
+		return wrap.Error(ctx, fmt.Errorf("failed to get ride: %w", err))
 	}
 
-	if ride.DriverID == nil || *ride.DriverID != msg.DriverID {
-		s.logger.Warn(ctx, "driver_id does not match the ride's driver", "ride_id", ride.ID, "ride_driver_id", ride.DriverID)
-		return wrap.Error(ctx, errors.New("driver_id does not match the ride's driver"))
-	}
-
-	ctx = wrap.WithRideID(ctx, ride.ID.String())
+	ctx = wrap.WithRideID(wrap.WithDriverID(wrap.WithPassengerID(ctx, ride.PassengerID.String()), msg.DriverID.String()), ride.ID.String())
 
 	switch msg.Status {
 	case types.StatusDriverEnRoute.String():
@@ -190,41 +181,39 @@ func (s *RideService) HandleDriverStatusUpdate(ctx context.Context, msg models.D
 		return wrap.Error(ctx, s.handleRideCompleted(ctx, ride, msg))
 	default:
 		// TODO: что вернуть
-		return wrap.Error(ctx, errors.New("invalid status"))
+		return wrap.Error(ctx, errors.New("invalid driver status"))
 	}
 }
 
 func (s *RideService) handleDriverEnRoute(ctx context.Context, ride *models.Ride, msg models.DriverStatusUpdateMessage) error {
 	ctx = wrap.WithAction(ctx, "handle_driver_en_route")
 
-	if err := s.trm.Do(ctx, func(ctx context.Context) error {
-		if ride.Status != types.StatusMatched.String() {
-			s.logger.Warn(ctx, "status already changed, skipping", "current_status", ride.Status)
-			return nil
-		}
+	s.logger.Debug(ctx, "handleDriverEnRoute")
 
-		if err := s.repo.UpdateStatus(ctx, ride.ID, types.StatusEnRoute); err != nil {
-			return fmt.Errorf("failed to update status to EN_ROUTE: %w", err)
-		}
+	if ride.Status != types.StatusMatched.String() {
+		s.logger.Warn(ctx, "invalid ride status", "current_status", ride.Status, "expectes_status", types.StatusMatched)
+		return fmt.Errorf("invalid ride status expected: %s", types.StatusMatched)
+	}
 
-		// отправляем пассажиру сообщение по вебсокету
-		wsMessage := models.StatusUpdateWebSocketMessage{
-			EventType: types.EventStatusChanged,
-			Data: models.RideStatusUpdateMessage{
-				RideID:        ride.ID,
-				Status:        types.StatusEnRoute.String(),
-				Timestamp:     time.Now(),
-				DriverID:      ride.DriverID,
-				CorrelationID: wrap.GetRequestID(ctx),
-			},
-		}
-		if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
-			return fmt.Errorf("failed to notify passnager: %w", err)
-		}
+	if err := s.repo.UpdateStatus(ctx, ride.ID, types.StatusEnRoute); err != nil {
+		return wrap.Error(ctx, fmt.Errorf("failed to update status to EN_ROUTE: %w", err))
+	}
 
-		return nil
-	}); err != nil {
-		return wrap.Error(ctx, err)
+	s.logger.Info(ctx, "updated ride status to EN_ROUTE")
+
+	// отправляем пассажиру сообщение по вебсокету
+	wsMessage := models.StatusUpdateWebSocketMessage{
+		EventType: types.EventStatusChanged,
+		Data: models.RideStatusUpdateMessage{
+			RideID:        ride.ID,
+			Status:        types.StatusEnRoute.String(),
+			Timestamp:     time.Now(),
+			DriverID:      &msg.DriverID,
+			CorrelationID: wrap.GetRequestID(ctx),
+		},
+	}
+	if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
+		s.logger.Warn(ctx, "failed to notify passenger", "error", err)
 	}
 
 	bytes, _ := json.Marshal(msg) // non fatal event so just ignore error
@@ -239,11 +228,14 @@ func (s *RideService) handleDriverEnRoute(ctx context.Context, ride *models.Ride
 func (s *RideService) handleDriverArrived(ctx context.Context, ride *models.Ride, msg models.DriverStatusUpdateMessage) error {
 	ctx = wrap.WithAction(ctx, "handle_driver_arrived")
 
+	s.logger.Debug(ctx, "handleDriverArrived")
+
+	if ride.Status != types.StatusEnRoute.String() {
+		s.logger.Warn(ctx, "invalid ride status", "current_status", ride.Status, "expectes_status", types.StatusEnRoute)
+		return fmt.Errorf("invalid ride status expected: %s", types.StatusEnRoute)
+	}
+
 	if err := s.trm.Do(ctx, func(ctx context.Context) error {
-		if ride.Status != types.StatusEnRoute.String() {
-			s.logger.Warn(ctx, "status already changed, skipping", "current_status", ride.Status)
-			return nil
-		}
 
 		if err := s.repo.UpdateStatus(ctx, ride.ID, types.StatusArrived); err != nil {
 			return err
@@ -253,24 +245,26 @@ func (s *RideService) handleDriverArrived(ctx context.Context, ride *models.Ride
 			return err
 		}
 
-		// отправляем пассажиру сообщение по вебсокету
-		wsMessage := models.StatusUpdateWebSocketMessage{
-			EventType: types.EventDriverArrived,
-			Data: models.RideStatusUpdateMessage{
-				RideID:        ride.ID,
-				Status:        types.StatusArrived.String(),
-				Timestamp:     time.Now(),
-				DriverID:      ride.DriverID,
-				CorrelationID: wrap.GetRequestID(ctx),
-			},
-		}
-		if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
-			return fmt.Errorf("failed to notify passnager: %w", err)
-		}
-
 		return nil
 	}); err != nil {
 		return wrap.Error(ctx, err)
+	}
+
+	s.logger.Info(ctx, "updated ride status to ARRIVED")
+
+	// отправляем пассажиру сообщение по вебсокету
+	wsMessage := models.StatusUpdateWebSocketMessage{
+		EventType: types.EventDriverArrived,
+		Data: models.RideStatusUpdateMessage{
+			RideID:        ride.ID,
+			Status:        types.StatusArrived.String(),
+			Timestamp:     time.Now(),
+			DriverID:      &msg.DriverID,
+			CorrelationID: wrap.GetRequestID(ctx),
+		},
+	}
+	if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
+		s.logger.Warn(ctx, "failed to notify passenger", "error", err)
 	}
 
 	bytes, _ := json.Marshal(msg) // non fatal event so just ignore error
@@ -285,12 +279,14 @@ func (s *RideService) handleDriverArrived(ctx context.Context, ride *models.Ride
 func (s *RideService) handleRideInProgress(ctx context.Context, ride *models.Ride, msg models.DriverStatusUpdateMessage) error {
 	ctx = wrap.WithAction(ctx, "handle_ride_in_progress")
 
-	if err := s.trm.Do(ctx, func(ctx context.Context) error {
-		if ride.Status != types.StatusArrived.String() {
-			s.logger.Warn(ctx, "status already changed, skipping", "current_status", ride.Status)
-			return nil
-		}
+	s.logger.Debug(ctx, "handleRideInProgress")
 
+	if ride.Status != types.StatusArrived.String() {
+		s.logger.Warn(ctx, "invalid ride status", "current_status", ride.Status, "expectes_status", types.StatusArrived)
+		return fmt.Errorf("invalid ride status expected: %s", types.StatusArrived)
+	}
+
+	if err := s.trm.Do(ctx, func(ctx context.Context) error {
 		if err := s.repo.UpdateStatus(ctx, ride.ID, types.StatusInProgress); err != nil {
 			return err
 		}
@@ -299,24 +295,26 @@ func (s *RideService) handleRideInProgress(ctx context.Context, ride *models.Rid
 			return err
 		}
 
-		// отправляем пассажиру сообщение по вебсокету
-		wsMessage := models.StatusUpdateWebSocketMessage{
-			EventType: types.EventRideStarted,
-			Data: models.RideStatusUpdateMessage{
-				RideID:        ride.ID,
-				Status:        types.StatusInProgress.String(),
-				Timestamp:     time.Now(),
-				DriverID:      ride.DriverID,
-				CorrelationID: wrap.GetRequestID(ctx),
-			},
-		}
-		if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
-			return fmt.Errorf("failed to notify passnager: %w", err)
-		}
-
 		return nil
 	}); err != nil {
 		return wrap.Error(ctx, err)
+	}
+
+	s.logger.Info(ctx, "updated ride status to IN_PROGRESS")
+
+	// отправляем пассажиру сообщение по вебсокету
+	wsMessage := models.StatusUpdateWebSocketMessage{
+		EventType: types.EventRideStarted,
+		Data: models.RideStatusUpdateMessage{
+			RideID:        ride.ID,
+			Status:        types.StatusInProgress.String(),
+			Timestamp:     time.Now(),
+			DriverID:      &msg.DriverID,
+			CorrelationID: wrap.GetRequestID(ctx),
+		},
+	}
+	if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
+		s.logger.Warn(ctx, "failed to notify passenger", "error", err)
 	}
 
 	bytes, _ := json.Marshal(msg) // non fatal event so just ignore error
@@ -330,12 +328,14 @@ func (s *RideService) handleRideInProgress(ctx context.Context, ride *models.Rid
 func (s *RideService) handleRideCompleted(ctx context.Context, ride *models.Ride, msg models.DriverStatusUpdateMessage) error {
 	ctx = wrap.WithAction(ctx, "handle_ride_completed")
 
-	if err := s.trm.Do(ctx, func(ctx context.Context) error {
-		if ride.Status != types.StatusInProgress.String() {
-			s.logger.Warn(ctx, "status already changed, skipping", "current_status", ride.Status)
-			return nil
-		}
+	s.logger.Debug(ctx, "handleRideCompleted")
 
+	if ride.Status != types.StatusInProgress.String() {
+		s.logger.Warn(ctx, "invalid ride status", "current_status", ride.Status, "expectes_status", types.StatusInProgress)
+		return fmt.Errorf("invalid ride status expected: %s", types.StatusInProgress)
+	}
+
+	if err := s.trm.Do(ctx, func(ctx context.Context) error {
 		if err := s.repo.UpdateStatus(ctx, ride.ID, types.StatusCompleted); err != nil {
 			return err
 		}
@@ -344,24 +344,26 @@ func (s *RideService) handleRideCompleted(ctx context.Context, ride *models.Ride
 			return err
 		}
 
-		// отправляем пассажиру сообщение по вебсокету
-		wsMessage := models.StatusUpdateWebSocketMessage{
-			EventType: types.EventRideCompleted,
-			Data: models.RideStatusUpdateMessage{
-				RideID:        ride.ID,
-				Status:        types.StatusCompleted.String(),
-				Timestamp:     time.Now(),
-				DriverID:      ride.DriverID,
-				CorrelationID: wrap.GetRequestID(ctx),
-			},
-		}
-		if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
-			return fmt.Errorf("failed to notify passnager: %w", err)
-		}
-
 		return nil
 	}); err != nil {
 		return wrap.Error(ctx, err)
+	}
+
+	s.logger.Info(ctx, "updated ride status to COMPLETED")
+
+	// отправляем пассажиру сообщение по вебсокету
+	wsMessage := models.StatusUpdateWebSocketMessage{
+		EventType: types.EventRideCompleted,
+		Data: models.RideStatusUpdateMessage{
+			RideID:        ride.ID,
+			Status:        types.StatusCompleted.String(),
+			Timestamp:     time.Now(),
+			DriverID:      &msg.DriverID,
+			CorrelationID: wrap.GetRequestID(ctx),
+		},
+	}
+	if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
+		s.logger.Warn(ctx, "failed to notify passenger", "error", err)
 	}
 
 	bytes, _ := json.Marshal(msg) // non fatal event so just ignore error

@@ -95,7 +95,7 @@ func (h *ConnectionHub) Delete(entityID uuid.UUID) error {
 
 // SendTo отправляет сообщение определённому клиенту по ID
 // возвращает ошибку ErrConnIsNotFound, если соединение не найдена
-func (h *ConnectionHub) SendTo(id uuid.UUID, msg map[string]any) error {
+func (h *ConnectionHub) SendTo(id uuid.UUID, msg any) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

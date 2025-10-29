@@ -24,7 +24,7 @@ func NewDriverHub(connHub *ws.ConnectionHub) *DriverHub {
 	}
 }
 
-func (h *DriverHub) SendRideOffer(ctx context.Context, driverID uuid.UUID, offer models.RideOffer) (bool, error) {
+func (h *DriverHub) GetRideOffer(ctx context.Context, driverID uuid.UUID, offer models.RideOffer) (bool, error) {
 	const op = "DriverHub.SendRideOffer"
 	offer.MsgType = "ride_offer"
 
@@ -78,7 +78,7 @@ func (h *DriverHub) SendRideDetails(ctx context.Context, details models.RideDeta
 	const op = "DriverHub.SendRideDetails"
 	details.MsgType = "ride_details"
 
-	conn, err := h.connections.GetConn(details.DriverID)
+	conn, err := h.connections.GetConn(*details.DriverID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

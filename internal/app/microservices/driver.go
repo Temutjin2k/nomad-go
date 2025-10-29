@@ -118,7 +118,7 @@ func NewDriver(ctx context.Context, cfg config.Config, log logger.Logger) (*Driv
 		Auth:          authService,
 	}
 
-	httpServer, err := server.New(ctx, cfg, options, nil, nil, authService, log)
+	httpServer, err := server.New(ctx, cfg, options, nil, nil, authService, nil, log)
 	if err != nil {
 		log.Error(ctx, "Failed to setup http server", err)
 		return nil, err

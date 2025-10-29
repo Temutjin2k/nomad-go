@@ -64,6 +64,5 @@ type AuthWebSocketReq struct {
 }
 
 type AuthWebSocketResp struct {
-	Type        string `json:"type"`
-	PassengerID string `json:"passenger_id"`
+	Type string `json:"type"`
 }
