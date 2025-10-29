@@ -4,7 +4,7 @@ import "time"
 
 // isRecoverableError returns true if the provided error must be requeued
 func isRecoverableError(err error) bool {
-	return false
+	return true
 }
 
 func retry(n int, sleep time.Duration, fn func() error) error {
