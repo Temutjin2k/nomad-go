@@ -146,35 +146,6 @@ func (r *RideRepo) Update(ctx context.Context, ride *models.Ride) error {
 	return nil
 }
 
-func (r *RideRepo) StartRide(ctx context.Context, rideID, driverID uuid.UUID, startedAt time.Time, rideEvent models.RideEvent) error {
-	const op = "rideRepo.StartRide"
-
-	// Update the ride status to 'IN_PROGRESS' and set the started_at timestamp
-	updateQuery := `
-        UPDATE rides
-        SET status = 'IN_PROGRESS', updated_at = now(), started_at = $2
-        WHERE id = $1'`
-
-	if _, err := TxorDB(ctx, r.db).Exec(ctx, updateQuery, rideID, startedAt); err != nil {
-		return wrap.Error(wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed), fmt.Errorf("%s: failed to update ride status: %w", op, err))
-	}
-
-	// Insert a new ride event into the ride_events table
-	insertEventQuery := `
-        INSERT INTO ride_events(ride_id, event_type, event_data)
-        VALUES($1, 'RIDE_STARTED', $2)`
-
-	if _, err := TxorDB(ctx, r.db).Exec(ctx, insertEventQuery, rideID, rideEvent); err != nil {
-		if postgres.IsForeignKeyViolation(err) {
-			return types.ErrRideNotFound
-		}
-
-		return wrap.Error(wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed), fmt.Errorf("%s: failed to insert ride event: %w", op, err))
-	}
-
-	return nil
-}
-
 func (r *RideRepo) CompleteRide(ctx context.Context, rideID, driverID uuid.UUID, completedAt time.Time, rideEvent models.RideEvent) error {
 	const op = "ideRepo.CompleteRide"
 
@@ -419,49 +390,15 @@ func (r *RideRepo) DriverMatchedForRide(ctx context.Context, rideID, driverID uu
 		updated_at = now()
 	WHERE id = $3`
 
-	_, err := q.Query(ctx, query, driverID, finalFare, rideID)
+	// используем Exec, так как это UPDATE
+	cmdTag, err := q.Exec(ctx, query, driverID, finalFare, rideID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			// no available ride to match
-			return nil
-		}
 		return wrap.Error(wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed), err)
 	}
 
-	return nil
-}
-
-// Cancel ride
-func (r *RideRepo) Cancel(ctx context.Context, rideID uuid.UUID) error {
-	q := TxorDB(ctx, r.db)
-
-	updateQuery := `
-		UPDATE rides
-		SET
-			status = 'CANCELLED',
-			cancelled_at = now(),
-			updated_at = now()
-		WHERE id = $1;`
-
-	cmdTag, err := q.Exec(ctx, updateQuery, rideID)
-	if err != nil {
-		return fmt.Errorf("ride repo: Cancel: %w", err)
-	}
-
 	if cmdTag.RowsAffected() == 0 {
-		return wrap.Error(ctx, types.ErrNotFound)
-	}
-
-	// insert ride cancelled event (event_data left null)
-	insertEventQuery := `
-		INSERT INTO ride_events(ride_id, event_type)
-		VALUES($1, 'RIDE_CANCELLED');`
-
-	if _, err := q.Exec(ctx, insertEventQuery, rideID); err != nil {
-		if postgres.IsForeignKeyViolation(err) {
-			return types.ErrRideNotFound
-		}
-		return wrap.Error(wrap.WithAction(ctx, types.ActionDatabaseTransactionFailed), fmt.Errorf("ride repo: Cancel (insert event): %w", err))
+		// no available ride to match
+		return nil
 	}
 
 	return nil

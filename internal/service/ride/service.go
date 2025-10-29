@@ -130,6 +130,7 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 
 	// Wait for driver response for 2 minutes
 	go func() {
+		s.logger.Debug(ctx, "start a gouroutine for waiting driver response")
 		ctx, cancel := context.WithTimeout(wrap.WithLogCtx(context.Background(), wrap.GetLogCtx(ctx)), time.Minute*2)
 		defer cancel()
 		// Start a goroutine to handle the driver's response
@@ -153,6 +154,8 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 				s.logger.Error(ctxx, "failed to notify passenger about ride cancelation", err)
 			}
 		}
+
+		s.logger.Debug(ctx, "finished a gouroutine for waiting driver response")
 	}()
 
 	return createdRide, nil

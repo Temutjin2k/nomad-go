@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Temutjin2k/ride-hail-system/config"
 	httpserver "github.com/Temutjin2k/ride-hail-system/internal/adapter/http/server"
@@ -36,26 +38,79 @@ type RideConsumers struct {
 	rideConsumer *rabbit.RideBroker
 	rideService  *ridego.RideService
 	log          logger.Logger
+
+	// sync и cancel для корректного завершения
+	wg     sync.WaitGroup
+	cancel context.CancelFunc
+	mu     sync.Mutex // защищает cancel от параллельных вызовов
 }
 
-func (c *RideConsumers) Start(ctx context.Context, errCh chan error) {
+func (c *RideConsumers) Start(parentCtx context.Context, errCh chan error) {
+	// создаём дочерний контекст, который можно будет отменить через Stop
+	ctx, cancel := context.WithCancel(parentCtx)
+	c.mu.Lock()
+	c.cancel = cancel
+	c.mu.Unlock()
+
+	// первая горутина
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
 		c.log.Info(ctx, "ConsumeDriverLocationUpdate has been started")
 		if err := c.rideConsumer.ConsumeDriverLocationUpdate(ctx, c.rideService.HandleDriverLocationUpdate); err != nil {
-			errCh <- fmt.Errorf("failed to start ConsumeDriverLocationUpdate: %w", err)
+			// пробрасываем ошибку в канал, если он ещё открыт
+			select {
+			case errCh <- fmt.Errorf("failed to start ConsumeDriverLocationUpdate: %w", err):
+			default:
+				// если канал полон/никто не слушает — просто залогируем
+				c.log.Error(ctx, "ConsumeDriverLocationUpdate error, errCh blocked", err)
+			}
 			return
 		}
 		c.log.Info(ctx, "ConsumeDriverLocationUpdate has been finished")
 	}()
 
+	// вторая горутина
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
 		c.log.Info(ctx, "ConsumeDriverStatusUpdate has been started")
 		if err := c.rideConsumer.ConsumeDriverStatusUpdate(ctx, c.rideService.HandleDriverStatusUpdate); err != nil {
-			errCh <- fmt.Errorf("failed to start ConsumeDriverStatusUpdate: %w", err)
+			select {
+			case errCh <- fmt.Errorf("failed to start ConsumeDriverStatusUpdate: %w", err):
+			default:
+				c.log.Error(ctx, "ConsumeDriverStatusUpdate error, errCh blocked", err)
+			}
 			return
 		}
 		c.log.Info(ctx, "ConsumeDriverStatusUpdate has been finished")
 	}()
+}
+
+// Stop отменяет внутренний контекст и ждёт завершения горутин с заданным таймаутом.
+// Возвращает ошибку, если ожидание превысило timeout.
+func (c *RideConsumers) Stop(timeout time.Duration) error {
+	c.mu.Lock()
+	if c.cancel != nil {
+		c.cancel()
+		c.cancel = nil
+	}
+	c.mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		c.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		c.log.Info(context.Background(), "ride consumers stopped gracefully")
+		return nil
+	case <-time.After(timeout):
+		c.log.Warn(context.Background(), "timeout while waiting for ride consumers to stop")
+		return fmt.Errorf("timeout waiting for ride consumers to stop")
+	}
 }
 
 // NewRide creates ride microservice
@@ -117,6 +172,10 @@ func (s *RideService) Start(ctx context.Context) error {
 	s.consumers.Start(ctx, errCh)
 
 	defer func() {
+		// тут не передаём ctx отменяемый — Stop сам отменит дочерний контекст потребителей
+		if err := s.consumers.Stop(5 * time.Second); err != nil {
+			s.log.Warn(ctx, "consumers stop error", "error", err.Error())
+		}
 		s.close(ctx)
 		s.log.Info(ctx, "ride service closed")
 	}()
@@ -142,15 +201,17 @@ func (s *RideService) close(ctx context.Context) {
 		}
 	}
 
-	fmt.Println("closing postgres")
-
-	s.postgresDB.Pool.Close()
-
 	fmt.Println("closing rabbit")
 	if s.rabbitMQ != nil {
 		if err := s.rabbitMQ.Close(ctx); err != nil {
 			s.log.Warn(ctx, "failed to close rabbitmq connection", "error", err.Error())
 		}
 	}
+
+	fmt.Println("closing postgres")
+	if s.postgresDB != nil && s.postgresDB.Pool != nil {
+		s.postgresDB.Pool.Close()
+	}
+
 	fmt.Println("closed everything")
 }

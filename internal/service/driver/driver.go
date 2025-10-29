@@ -69,6 +69,7 @@ func New(
 			coordinate: coordinateRepo,
 			user:       userRepo,
 			ride:       rideRepo,
+			eventRepo:  eventRepo,
 		},
 		logic: logic{
 			calculate: calculate,
