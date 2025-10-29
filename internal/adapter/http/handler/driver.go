@@ -10,6 +10,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler/dto"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
+	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
 	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
@@ -108,6 +109,19 @@ func (h *Driver) GoOnline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// провереяем что драйвер хочет изменить именно себя
+	user := models.UserFromContext(ctx)
+	if user == nil {
+		h.l.Warn(ctx, "failed to get user form context")
+		errorResponse(w, http.StatusUnauthorized, auth.ErrUnauthorized)
+		return
+	}
+
+	if user.ID.String() != driverID.String() {
+		errorResponse(w, http.StatusForbidden, auth.ErrActionForbidden.Error())
+		return
+	}
+
 	var goOnlineReq dto.CoordinateUpdateReq
 	if err := readJSON(w, r, &goOnlineReq); err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to read request JSON data", err)
@@ -155,6 +169,19 @@ func (h *Driver) GoOffline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// провереяем что драйвер хочет изменить именно себя
+	user := models.UserFromContext(ctx)
+	if user == nil {
+		h.l.Warn(ctx, "failed to get user form context")
+		errorResponse(w, http.StatusUnauthorized, auth.ErrUnauthorized)
+		return
+	}
+
+	if user.ID.String() != driverID.String() {
+		errorResponse(w, http.StatusForbidden, auth.ErrActionForbidden.Error())
+		return
+	}
+
 	summary, err := h.service.GoOffline(ctx, driverID)
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to set driver status to offline", err)
@@ -189,6 +216,19 @@ func (h *Driver) StartRide(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.l.Warn(ctx, "invalid driver uuid format")
 		errorResponse(w, http.StatusBadRequest, "invalid driver uuid format")
+		return
+	}
+
+	// провереяем что драйвер хочет изменить именно себя
+	user := models.UserFromContext(ctx)
+	if user == nil {
+		h.l.Warn(ctx, "failed to get user form context")
+		errorResponse(w, http.StatusUnauthorized, auth.ErrUnauthorized)
+		return
+	}
+
+	if user.ID.String() != driverID.String() {
+		errorResponse(w, http.StatusForbidden, auth.ErrActionForbidden.Error())
 		return
 	}
 
@@ -243,6 +283,19 @@ func (h *Driver) CompleteRide(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.l.Warn(ctx, "invalid driver uuid format")
 		errorResponse(w, http.StatusBadRequest, "invalid driver uuid format")
+		return
+	}
+
+	// провереяем что драйвер хочет изменить именно себя
+	user := models.UserFromContext(ctx)
+	if user == nil {
+		h.l.Warn(ctx, "failed to get user form context")
+		errorResponse(w, http.StatusUnauthorized, auth.ErrUnauthorized)
+		return
+	}
+
+	if user.ID.String() != driverID.String() {
+		errorResponse(w, http.StatusForbidden, auth.ErrActionForbidden.Error())
 		return
 	}
 
@@ -304,6 +357,19 @@ func (h *Driver) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.l.Warn(ctx, "invalid driver uuid format")
 		errorResponse(w, http.StatusBadRequest, "invalid driver uuid format")
+		return
+	}
+
+	// провереяем что драйвер хочет изменить именно себя
+	user := models.UserFromContext(ctx)
+	if user == nil {
+		h.l.Warn(ctx, "failed to get user form context")
+		errorResponse(w, http.StatusUnauthorized, auth.ErrUnauthorized)
+		return
+	}
+
+	if user.ID.String() != driverID.String() {
+		errorResponse(w, http.StatusForbidden, auth.ErrActionForbidden.Error())
 		return
 	}
 

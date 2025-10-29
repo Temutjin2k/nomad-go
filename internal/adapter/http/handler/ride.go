@@ -10,6 +10,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler/dto"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
+	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
@@ -72,12 +73,12 @@ func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
 	user := models.UserFromContext(ctx)
 	if user == nil {
 		h.l.Warn(ctx, "failed to get user form context")
-		errorResponse(w, http.StatusUnauthorized, types.ErrUserNotFound.Error())
+		errorResponse(w, http.StatusUnauthorized, auth.ErrUnauthorized)
 		return
 	}
 
 	if user.ID.String() != request.PassengerID {
-		errorResponse(w, http.StatusForbidden, types.ErrUserNotFound.Error())
+		errorResponse(w, http.StatusForbidden, auth.ErrActionForbidden)
 		return
 	}
 

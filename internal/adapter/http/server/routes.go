@@ -39,7 +39,7 @@ func (a *API) setupRideRoutes() {
 
 // setupDriverAndLocationRoutes setups routes for driver and location service
 func (a *API) setupDriverAndLocationRoutes() {
-	a.mux.Handle("POST /drivers", a.m.RequireRoles(a.routes.driver.Register, types.RoleDriver))
+	a.mux.HandleFunc("POST /drivers", a.routes.driver.Register)
 	a.mux.Handle("POST /drivers/{driver_id}/online", a.m.RequireRoles(a.routes.driver.GoOnline, types.RoleDriver))         // Driver goes online
 	a.mux.Handle("POST /drivers/{driver_id}/offline", a.m.RequireRoles(a.routes.driver.GoOffline, types.RoleDriver))       // Driver goes offline
 	a.mux.Handle("POST /drivers/{driver_id}/location", a.m.RequireRoles(a.routes.driver.UpdateLocation, types.RoleDriver)) // Update driver location
