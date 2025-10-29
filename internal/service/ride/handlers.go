@@ -26,7 +26,7 @@ func (s *RideService) HandleDriverResponse(ctx context.Context, msg models.Drive
 
 	ride, err := s.repo.Get(ctx, msg.RideID)
 	if err != nil {
-		return wrap.Error(ctx, fmt.Errorf("failed to get ride: %w", err))
+		return wrap.Error(ctx, fmt.Errorf("%w: failed to get ride: %w", types.ErrDatabaseFailed, err))
 	}
 
 	if ride == nil {
@@ -40,7 +40,7 @@ func (s *RideService) HandleDriverResponse(ctx context.Context, msg models.Drive
 
 	// Изменяем статус поездки на matched, добавляем driver_id
 	if err := s.repo.DriverMatchedForRide(ctx, ride.ID, msg.DriverID, ride.EstimatedFare); err != nil {
-		return wrap.Error(ctx, fmt.Errorf("failed to update ride status: %w", err))
+		return wrap.Error(ctx, fmt.Errorf("%w: failed to update ride status: %w", types.ErrDatabaseFailed, err))
 	}
 
 	message := models.RideStatusUpdateMessage{
@@ -52,7 +52,7 @@ func (s *RideService) HandleDriverResponse(ctx context.Context, msg models.Drive
 	}
 
 	if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
-		return wrap.Error(ctx, fmt.Errorf("failed to publish ride status: %w", err))
+		return wrap.Error(ctx, fmt.Errorf("%w: %w", types.ErrFailedToPublishRideStatus, err))
 	}
 
 	data := models.StatusUpdateWebSocketMessage{
@@ -147,7 +147,6 @@ func (s *RideService) HandleDriverLocationUpdate(ctx context.Context, msg models
 
 	if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, wsMessage); err != nil {
 		s.logger.Warn(ctx, "failed to send a driver location update to passenger via websocket", "error", err)
-		return wrap.Error(ctx, err)
 	}
 
 	return nil
@@ -165,7 +164,7 @@ func (s *RideService) HandleDriverStatusUpdate(ctx context.Context, msg models.D
 
 	ride, err := s.repo.Get(ctx, *msg.RideID)
 	if err != nil {
-		return wrap.Error(ctx, fmt.Errorf("failed to get ride: %w", err))
+		return wrap.Error(ctx, fmt.Errorf("%w: failed to get ride: %w", types.ErrDatabaseFailed, err))
 	}
 
 	ctx = wrap.WithRideID(wrap.WithDriverID(wrap.WithPassengerID(ctx, ride.PassengerID.String()), msg.DriverID.String()), ride.ID.String())
