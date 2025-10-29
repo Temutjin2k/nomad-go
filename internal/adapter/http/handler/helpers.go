@@ -137,6 +137,7 @@ func GetCode(err error) int {
 		t.ErrDriverMustBeBusy,
 		t.ErrPassengerHasActiveRide,
 		t.ErrRideStatusNotMatched,
+		t.ErrRideAlreadyHasDriver,
 	):
 		return http.StatusConflict
 

@@ -172,7 +172,7 @@ func (r *RideBroker) ConsumeDriverStatusUpdate(ctx context.Context, handler Driv
 				if !ok {
 					r.l.Warn(ctx, "message channel closed, reconnecting...")
 					time.Sleep(2 * time.Second)
-					continue consumeLoop
+					break consumeLoop
 				}
 
 				go func(d amqp091.Delivery) {
@@ -335,7 +335,7 @@ func (r *RideBroker) ConsumeDriverLocationUpdate(ctx context.Context, handler Lo
 				if !ok {
 					r.l.Warn(ctx, "message channel closed, reconnecting...")
 					time.Sleep(2 * time.Second)
-					continue consumeLoop
+					break consumeLoop
 				}
 
 				// handle each message in its own goroutine

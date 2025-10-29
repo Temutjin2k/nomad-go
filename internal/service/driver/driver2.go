@@ -285,6 +285,9 @@ func (s *Service) processMatchedRide(ctx context.Context, driverID, rideID uuid.
 			return fmt.Errorf("failed to get ride: %w", err)
 		}
 
+		if details.DriverID == nil {
+			return types.ErrRideAlreadyHasDriver
+		}
 		details.DriverID = &driverID
 
 		if _, err := s.repos.driver.ChangeStatus(ctx, driverID, types.StatusDriverEnRoute); err != nil {

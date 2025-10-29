@@ -10,10 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
+	"github.com/gorilla/websocket"
 )
 
 // Conn представляет собой одно соединение WebSocket, связанное с сущностью (например, драйвером)
@@ -96,6 +95,12 @@ mainLoop:
 			c.l.Debug(c.ctx, "heartbeat loop stopped", "entity_ID", c.entityID)
 			break mainLoop
 		case <-ticker.C:
+			// Отправляем следующий ping и уходим на новый цикл ожидания
+			if err := c.sendPing(); err != nil {
+				c.l.Error(c.ctx, "failed to send ping", err, "entity_ID", c.entityID)
+				return c.Close()
+			}
+
 			if c.isIdle(timeout) {
 				c.l.Warn(c.ctx, "connection idle too long, closing",
 					"idle_for", time.Since(c.lastPong).String(),
@@ -103,12 +108,6 @@ mainLoop:
 					"entity_ID", c.entityID,
 				)
 				break mainLoop
-			}
-
-			// Отправляем следующий ping и уходим на новый цикл ожидания
-			if err := c.sendPing(); err != nil {
-				c.l.Error(c.ctx, "failed to send ping", err, "entity_ID", c.entityID)
-				return c.Close()
 			}
 		}
 	}

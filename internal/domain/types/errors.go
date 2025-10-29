@@ -30,4 +30,5 @@ var (
 	ErrRideStatusNotMatched   = errors.New("ride status must be matched")
 	ErrListenTimeout          = errors.New("listen timeout")
 	ErrPassengerHasActiveRide = errors.New("passenger already has an active ride")
+	ErrRideAlreadyHasDriver   = errors.New("driver already has a driver")
 )

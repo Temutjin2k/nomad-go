@@ -73,12 +73,12 @@ func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
 	user := models.UserFromContext(ctx)
 	if user == nil {
 		h.l.Warn(ctx, "failed to get user form context")
-		errorResponse(w, http.StatusUnauthorized, auth.ErrUnauthorized)
+		errorResponse(w, http.StatusUnauthorized, auth.ErrUnauthorized.Error())
 		return
 	}
 
 	if user.ID.String() != request.PassengerID {
-		errorResponse(w, http.StatusForbidden, auth.ErrActionForbidden)
+		errorResponse(w, http.StatusForbidden, auth.ErrActionForbidden.Error())
 		return
 	}
 
