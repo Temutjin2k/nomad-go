@@ -201,17 +201,13 @@ func (s *RideService) close(ctx context.Context) {
 		}
 	}
 
-	fmt.Println("closing rabbit")
 	if s.rabbitMQ != nil {
 		if err := s.rabbitMQ.Close(ctx); err != nil {
 			s.log.Warn(ctx, "failed to close rabbitmq connection", "error", err.Error())
 		}
 	}
 
-	fmt.Println("closing postgres")
 	if s.postgresDB != nil && s.postgresDB.Pool != nil {
 		s.postgresDB.Pool.Close()
 	}
-
-	fmt.Println("closed everything")
 }

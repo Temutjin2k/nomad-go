@@ -27,7 +27,6 @@ type (
 
 		Database          DatabaseConfig
 		RabbitMQ          RabbitMQConfig
-		WebSocket         WebSocketConfig
 		ExternalAPIConfig ExternalAPIConfig
 		Services          ServicesConfig
 		Auth              Auth
@@ -58,10 +57,6 @@ type (
 		Port     string `env:"RABBITMQ_PORT" default:"5672"`
 		User     string `env:"RABBITMQ_USER" default:"guest"`
 		Password string `env:"RABBITMQ_PASSWORD" default:"guest"`
-	}
-
-	WebSocketConfig struct {
-		Port string `env:"WEBSOCKET_PORT" default:"8080"`
 	}
 
 	ServicesConfig struct {

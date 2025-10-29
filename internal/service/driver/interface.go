@@ -56,10 +56,18 @@ type UserRepo interface {
 
 /*=====================Ride Repository============================*/
 
+type RideRepo interface {
+	RideGetter
+	RideChecker
+}
 type RideGetter interface {
 	Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
 	GetDetails(ctx context.Context, rideID uuid.UUID) (*models.RideDetails, error)
 	GetPickupCoordinate(ctx context.Context, rideID uuid.UUID) (*models.Location, error)
+}
+
+type RideChecker interface {
+	CheckActiveRideByPassengerID(ctx context.Context, passengerID uuid.UUID) (*models.Ride, error)
 }
 
 /*========================Publisher===============================*/

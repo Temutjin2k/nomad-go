@@ -9,14 +9,14 @@ import (
 )
 
 type CreateRideRequest struct {
-	PassengerID          string  `json:"passenger_id"`
-	PickupLatitude       float64 `json:"pickup_latitude"`
-	PickupLongitude      float64 `json:"pickup_longitude"`
-	PickupAddress        string  `json:"pickup_address"`
-	DestinationLatitude  float64 `json:"destination_latitude"`
-	DestinationLongitude float64 `json:"destination_longitude"`
-	DestinationAddress   string  `json:"destination_address"`
-	RideType             string  `json:"ride_type"`
+	PassengerID          string   `json:"passenger_id"`
+	PickupLatitude       *float64 `json:"pickup_latitude"`
+	PickupLongitude      *float64 `json:"pickup_longitude"`
+	PickupAddress        string   `json:"pickup_address"`
+	DestinationLatitude  *float64 `json:"destination_latitude"`
+	DestinationLongitude *float64 `json:"destination_longitude"`
+	DestinationAddress   string   `json:"destination_address"`
+	RideType             string   `json:"ride_type"`
 }
 
 // для создания поездки
@@ -31,14 +31,24 @@ func (r *CreateRideRequest) Validate(v *validator.Validator) {
 	// Pickup Location
 	v.Check(r.PickupAddress != "", "pickup_address", "must be provided")
 	v.Check(len(r.PickupAddress) <= 255, "pickup_address", "must not be more than 255 characters long")
-	v.Check(r.PickupLatitude >= -90 && r.PickupLatitude <= 90, "pickup_latitude", "must be between -90 and 90")
-	v.Check(r.PickupLongitude >= -180 && r.PickupLongitude <= 180, "pickup_longitude", "must be between -180 and 180")
+	if r.PickupLatitude != nil && r.PickupLongitude != nil {
+		v.Check(*r.PickupLatitude >= -90 && *r.PickupLatitude <= 90, "pickup_latitude", "must be between -90 and 90")
+		v.Check(*r.PickupLongitude >= -180 && *r.PickupLongitude <= 180, "pickup_longitude", "must be between -180 and 180")
+	} else {
+		v.Check(r.PickupLatitude != nil, "pickup_latitude", "must be provided")
+		v.Check(r.PickupLongitude != nil, "pickup_longitude", "must be provided")
+	}
 
 	// Destination Location
 	v.Check(r.DestinationAddress != "", "destination_address", "must be provided")
 	v.Check(len(r.DestinationAddress) <= 255, "destination_address", "must not be more than 255 characters long")
-	v.Check(r.DestinationLatitude >= -90 && r.DestinationLatitude <= 90, "destination_latitude", "must be between -90 and 90")
-	v.Check(r.DestinationLongitude >= -180 && r.DestinationLongitude <= 180, "destination_longitude", "must be between -180 and 180")
+	if r.DestinationLatitude != nil && r.DestinationLongitude != nil {
+		v.Check(*r.DestinationLatitude >= -90 && *r.DestinationLatitude <= 90, "destination_latitude", "must be between -90 and 90")
+		v.Check(*r.DestinationLongitude >= -180 && *r.DestinationLongitude <= 180, "destination_longitude", "must be between -180 and 180")
+	} else {
+		v.Check(r.DestinationLatitude != nil, "destination_latitude", "must be provided")
+		v.Check(r.PickupLongitude != nil, "destination_longitude", "must be provided")
+	}
 
 	// RideType
 	v.Check(r.RideType != "", "ride_type", "must be provided")
@@ -46,7 +56,6 @@ func (r *CreateRideRequest) Validate(v *validator.Validator) {
 		v.Check(validator.PermittedValue(r.RideType, "ECONOMY", "PREMIUM", "XL"), "ride_type", "must be one of ECONOMY, PREMIUM, or XL")
 	}
 }
-
 
 type CreateRideResponse struct {
 	RideID               uuid.UUID `json:"ride_id"`
@@ -67,7 +76,6 @@ func (r *CancelRideRequest) Validate(v *validator.Validator) {
 	v.Check(len(r.Reason) <= 500, "reason", "must not be more than 500 characters long")
 }
 
-
 type CancelRideResponse struct {
 	RideID      uuid.UUID `json:"ride_id"`
 	Status      string    `json:"status"`
@@ -85,13 +93,13 @@ func (r *CreateRideRequest) ToModel() (*models.Ride, error) {
 		PassengerID: passengerUUID,
 		RideType:    r.RideType,
 		Pickup: models.Location{
-			Latitude:  r.PickupLatitude,
-			Longitude: r.PickupLongitude,
+			Latitude:  *r.PickupLatitude,
+			Longitude: *r.PickupLongitude,
 			Address:   r.PickupAddress,
 		},
 		Destination: models.Location{
-			Latitude:  r.DestinationLatitude,
-			Longitude: r.DestinationLongitude,
+			Latitude:  *r.DestinationLatitude,
+			Longitude: *r.DestinationLongitude,
 			Address:   r.DestinationAddress,
 		},
 	}, nil

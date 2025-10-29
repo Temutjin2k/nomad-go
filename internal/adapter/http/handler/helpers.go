@@ -96,28 +96,34 @@ func readJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 
 	return nil
 }
-
 func GetCode(err error) int {
 	switch {
+	// 400 Bad Request — неверные данные, формат и т.п.
 	case oneOf(err,
 		t.ErrInvalidLicenseFormat,
 		t.ErrDriverAlreadyOffline,
 		t.ErrDriverAlreadyOnline,
 		t.ErrLicenseAlreadyExists,
+		t.ErrInvalidRideStatus,
 	):
 		return http.StatusBadRequest
 
+	// 404 Not Found — отсутствующие данные
 	case oneOf(err,
 		t.ErrUserNotFound,
 		t.ErrSessionNotFound,
+		t.ErrDriverIDNotExist,
 		t.ErrNoCoordinates,
 		t.ErrRideNotFound,
 		t.ErrDriverLocationNotFound,
+		t.ErrNotFound,
+		t.ErrDriversNotFound,
 		sql.ErrNoRows,
 		pgx.ErrNoRows,
 	):
 		return http.StatusNotFound
 
+	// 409 Conflict — логические конфликты или бизнес-правила
 	case oneOf(err,
 		t.ErrDriverRegistered,
 		t.ErrDriverMustBeAvailable,
@@ -129,9 +135,12 @@ func GetCode(err error) int {
 		t.ErrRideNotInProgress,
 		t.ErrRideCannotBeCancelled,
 		t.ErrDriverMustBeBusy,
+		t.ErrPassengerHasActiveRide,
+		t.ErrRideStatusNotMatched,
 	):
 		return http.StatusConflict
 
+	// 401 Unauthorized — невалидная авторизация
 	case oneOf(err,
 		authSvc.ErrInvalidCredentials,
 		authSvc.ErrInvalidToken,
@@ -139,9 +148,18 @@ func GetCode(err error) int {
 	):
 		return http.StatusUnauthorized
 
+	// 403 Forbidden — действия запрещены
 	case oneOf(err, authSvc.ErrCannotCreateAdmin, authSvc.ErrActionForbidden):
 		return http.StatusForbidden
 
+	// 408 Request Timeout — таймауты ожидания
+	case oneOf(err,
+		t.ErrDriverSearchTimeout,
+		t.ErrListenTimeout,
+	):
+		return http.StatusRequestTimeout
+
+	// 500 Internal Server Error — все остальные случаи
 	default:
 		return http.StatusInternalServerError
 	}

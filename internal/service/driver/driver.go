@@ -42,7 +42,7 @@ type infra struct {
 type repos struct {
 	driver     DriverRepo
 	session    DriverSessionRepo
-	ride       RideGetter
+	ride       RideRepo
 	user       UserRepo
 	coordinate CoordinateRepo
 	eventRepo  RideEventRepository
@@ -54,7 +54,7 @@ func New(
 	sessionRepo DriverSessionRepo,
 	coordinateRepo CoordinateRepo,
 	userRepo UserRepo,
-	rideRepo RideGetter,
+	rideRepo RideRepo,
 	addressGetter GeoCoder,
 	publisher Publisher,
 	calculate ridecalc.Calculator,
@@ -123,6 +123,16 @@ func (s *Service) Register(ctx context.Context, newDriver *models.Driver) error 
 		}
 		if exist {
 			return types.ErrDriverRegistered
+		}
+
+		activeRide, err := s.repos.ride.CheckActiveRideByPassengerID(ctx, newDriver.ID)
+		if err != nil {
+			return fmt.Errorf("failed to check passenger's active ride: %w", err)
+		}
+
+		// если у пассажира уже есть активная поездка, вернуть ошибку
+		if activeRide != nil {
+			return types.ErrPassengerHasActiveRide
 		}
 
 		// Determine vehicle class (Economy / XL / Premium)
@@ -414,6 +424,11 @@ func (s *Service) CompleteRide(ctx context.Context, rideID uuid.UUID, data Compl
 			return types.ErrDriverMustBeBusy
 		}
 
+		// Ensure the ride is assigned to the driver starting it
+		if ride.DriverID != nil && *ride.DriverID != data.DriverID {
+			return types.ErrRideDriverMismatch
+		}
+
 		// Get address by geocoding
 		data.Location.Address, err = s.infra.addressGetter.GetAddress(ctx, data.Location.Longitude, data.Location.Latitude)
 		if err != nil {
@@ -467,8 +482,11 @@ func (s *Service) UpdateLocation(ctx context.Context, data models.RideLocationUp
 	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
 		Action:   "update_driver_location",
 		DriverID: data.DriverID.String(),
-		RideID:   data.RideID.String(),
 	})
+
+	if data.RideID != nil {
+		ctx = wrap.WithRideID(ctx, data.RideID.String())
+	}
 
 	fn := func(ctx context.Context) error {
 		// Check if driver exists in DB

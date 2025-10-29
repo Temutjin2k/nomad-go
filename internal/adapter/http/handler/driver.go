@@ -437,13 +437,13 @@ func (h *Driver) HandleWS(w http.ResponseWriter, r *http.Request) {
 	exist, err := h.service.IsExist(ctx, driverID)
 	if err != nil {
 		h.l.Error(ctx, "failed to check driver existense", err, "driver_id", driverID)
-		badRequestResponse(w, err.Error())
+		errorResponse(w, http.StatusInternalServerError, "faield to check driver existence")
 		return
 	}
 
 	if !exist {
 		h.l.Debug(ctx, "driver is not exist", "driver_id", driverID)
-		badRequestResponse(w, types.ErrUserNotFound.Error())
+		errorResponse(w, http.StatusNotFound, types.ErrUserNotFound.Error())
 		return
 	}
 
