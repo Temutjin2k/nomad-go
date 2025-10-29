@@ -69,6 +69,18 @@ func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := models.UserFromContext(ctx)
+	if user == nil {
+		h.l.Warn(ctx, "failed to get user form context")
+		errorResponse(w, http.StatusUnauthorized, types.ErrUserNotFound.Error())
+		return
+	}
+
+	if user.ID.String() != request.PassengerID {
+		errorResponse(w, http.StatusForbidden, types.ErrUserNotFound.Error())
+		return
+	}
+
 	domainModel, err := request.ToModel()
 	if err != nil {
 		h.l.Error(ctx, "failed to map request", err)

@@ -139,7 +139,7 @@ func GetCode(err error) int {
 	):
 		return http.StatusUnauthorized
 
-	case oneOf(err, authSvc.ErrCannotCreateAdmin):
+	case oneOf(err, authSvc.ErrCannotCreateAdmin, authSvc.ErrActionForbidden):
 		return http.StatusForbidden
 
 	default:

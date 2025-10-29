@@ -11,6 +11,7 @@ import (
 
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/models"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
+	authSvc "github.com/Temutjin2k/ride-hail-system/internal/service/auth"
 	ridecalc "github.com/Temutjin2k/ride-hail-system/internal/service/calculator"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
@@ -171,9 +172,18 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 		ride, err := s.repo.Get(ctx, rideID)
 		if err != nil {
 			if errors.Is(err, types.ErrNotFound) {
-				return wrap.Error(ctx, types.ErrRideNotFound)
+				return types.ErrRideNotFound
 			}
-			return wrap.Error(ctx, fmt.Errorf("could not find ride by id: %w", err))
+			return fmt.Errorf("could not find ride by id: %w", err)
+		}
+
+		// проверяем если юзер хочет отменить именно свою поездку а не чужую
+		user := models.UserFromContext(ctx)
+		if user == nil {
+			return authSvc.ErrInvalidCredentials
+		}
+		if ride.PassengerID != user.ID {
+			return authSvc.ErrActionForbidden
 		}
 
 		if ride.Status == types.StatusCompleted.String() || ride.Status == types.StatusCancelled.String() {

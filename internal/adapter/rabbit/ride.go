@@ -207,21 +207,18 @@ type DriverResponseHandler func(ctx context.Context, req models.DriverMatchRespo
 func (r *RideBroker) ConsumeDriverResponse(ctx context.Context, targetRideID uuid.UUID, handler DriverResponseHandler) error {
 	ctx = wrap.WithAction(ctx, "rabbitmq_consume_driver_response")
 
-	// Основной цикл потребителя
 	for {
 		if ctx.Err() != nil {
 			r.l.Debug(ctx, "consume driver response stopped by context")
 			return nil
 		}
 
-		// Проверяем и восстанавливаем соединение
 		if err := r.client.EnsureConnection(ctx); err != nil {
 			r.l.Error(ctx, "ensure connection failed", err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
 
-		// Подписываемся на очередь
 		msgs, err := r.client.Channel.Consume(QueueDriverResponse, "", false, false, false, false, nil)
 		if err != nil {
 			r.l.Error(ctx, "consume failed", err)
@@ -231,50 +228,70 @@ func (r *RideBroker) ConsumeDriverResponse(ctx context.Context, targetRideID uui
 
 		r.l.Info(ctx, "start consuming driver response", "queue", QueueDriverResponse)
 
-		// Цикл чтения сообщений
 	consumeLoop:
 		for {
 			select {
 			case <-ctx.Done():
-				r.l.Info(ctx, "driver response consumer shutting down")
-				return errors.New("failed to get response for targetRideID")
-
+				r.l.Info(ctx, "driver response consumer shutting down by context")
+				// не возвращаем внутреннюю ошибку — вызывающая сторона сама решит, что делать
+				return errors.New("consume driver response: context cancelled")
 			case msg, ok := <-msgs:
 				if !ok {
 					r.l.Warn(ctx, "message channel closed, reconnecting...")
 					time.Sleep(2 * time.Second)
-					continue consumeLoop
+					break consumeLoop
 				}
 
 				var req models.DriverMatchResponse
 				if err := json.Unmarshal(msg.Body, &req); err != nil {
 					r.l.Error(ctx, "failed to unmarshal driver match response", err)
-					msg.Nack(false, false) // не подтверждаем сообщение
+					// отбросить сообщение (не подтверждаем и не перекинем)
+					if err2 := msg.Nack(false, false); err2 != nil {
+						r.l.Error(ctx, "nack failed", err2)
+					}
 					continue consumeLoop
 				}
 
 				if req.RideID != targetRideID {
-					// Не наш rideID, пропускаем сообщение
-					msg.Nack(false, true)
+					// не наш rideID - вернуть в очередь для других потребителей
+					if err := msg.Nack(false, true); err != nil {
+						r.l.Error(ctx, "nack requeue failed", err)
+					}
 					continue consumeLoop
 				}
 
-				// добавляем в контекст переменные для логирования и трассировки
 				ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), msg.CorrelationId)
 
+				// Выполняем обработчик
 				if err := handler(ctxx, req); err != nil {
 					r.l.Error(wrap.ErrorCtx(ctx, err), "failed to handle driver response", err)
 
-					// если ошибка восстановимая, повторно помещаем в очередь
+					// решаем как ответить брокеру
 					if isRecoverableError(err) {
-						msg.Nack(false, true) // повторно помещаем в очередь
+						// перекидываем обратно в очередь
+						if derr := msg.Nack(false, true); derr != nil {
+							r.l.Error(ctx, "nack(requeue) failed", derr)
+						}
 					} else {
-						msg.Nack(false, false) // не подтверждаем сообщение
+						// отбросить сообщение
+						if derr := msg.Nack(false, false); derr != nil {
+							r.l.Error(ctx, "nack(discard) failed", derr)
+						}
 					}
+
+					// После обработанного сообщения выходим (мы завершили ожидание для этого rideID)
+					return nil
 				}
 
-				return nil
+				// всё успешно -> подтверждаем
+				if err := msg.Ack(false); err != nil {
+					r.l.Error(ctx, "failed to ack message", err)
+					// Если ack не удался — пробуем nack без requeue (чтобы не застрять)
+					_ = msg.Nack(false, false)
+				}
 
+				// Успешная обработка — завершить потребителя для данного ride
+				return nil
 			}
 		}
 	}
