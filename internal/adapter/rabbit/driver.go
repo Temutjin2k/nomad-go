@@ -155,7 +155,7 @@ func (r *DriverBroker) ConsumeRideRequest(ctx context.Context, fn ConsumeRideHan
 	}
 }
 
-type MatchConfHandlerFunc func(ctx context.Context, req models.RideStatusUpdateMessage) error
+type MatchConfHandlerFunc func(ctx context.Context, req models.RideStatusUpdateMessage, stopCh chan struct{}) error
 
 func (r *DriverBroker) ConsumeStatusUpdate(ctx context.Context, fn MatchConfHandlerFunc) error {
 	const op = "RideConsumer.ConsumeStatusUpdate"
@@ -183,11 +183,15 @@ func (r *DriverBroker) ConsumeStatusUpdate(ctx context.Context, fn MatchConfHand
 
 		r.l.Info(ctx, "start consuming ride status", "queue", QueueRideStatus)
 
+		stopCh := make(chan struct{}, 1)
 	consumeLoop:
 		for {
 			select {
 			case <-ctx.Done():
 				r.l.Info(ctx, "match confirmation consumer shutting down", "op", op)
+				return nil
+			case <-stopCh:
+				r.l.Info(ctx, "match confirmation consumer has been stopped", "op", op)
 				return nil
 
 			case msg, ok := <-msgs:
@@ -209,7 +213,7 @@ func (r *DriverBroker) ConsumeStatusUpdate(ctx context.Context, fn MatchConfHand
 					ctxx := wrap.WithRequestID(wrap.WithRideID(ctx, req.RideID.String()), msg.CorrelationId)
 
 					// Вызов обработчика
-					if err := fn(ctxx, req); err != nil {
+					if err := fn(ctxx, req, stopCh); err != nil {
 						r.l.Error(ctx, "failed to handle status update", err, "op", op)
 						_ = msg.Nack(false, false)
 						return

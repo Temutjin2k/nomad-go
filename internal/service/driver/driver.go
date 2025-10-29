@@ -230,18 +230,6 @@ func (s *Service) GoOnline(ctx context.Context, driverID uuid.UUID, location mod
 			return fmt.Errorf("failed to insert new coordinate data: %w", err)
 		}
 
-		// // Publish driver status
-		// if err := s.infra.publisher.PublishDriverStatus(
-		// 	ctx,
-		// 	models.DriverStatusUpdateMessage{
-		// 		DriverID:  driverID,
-		// 		Status:    types.StatusDriverAvailable.String(),
-		// 		Timestamp: now,
-		// 		RideID:    nil,
-		// 	}); err != nil {
-		// 	return fmt.Errorf("failed to publish driver status: %w", err)
-		// }
-
 		return nil
 	}
 
@@ -294,19 +282,6 @@ func (s *Service) GoOffline(ctx context.Context, driverID uuid.UUID) (models.Ses
 		if err := s.repos.driver.UpdateStats(ctx, driverID, summary.RidesCompleted, summary.Earnings); err != nil {
 			return fmt.Errorf("failed to update driver stats: %w", err)
 		}
-
-		// Publish driver status
-		// if err := s.infra.publisher.PublishDriverStatus(
-		// 	ctx,
-		// 	models.DriverStatusUpdateMessage{
-		// 		DriverID:  driverID,
-		// 		Status:    types.StatusDriverOffline.String(),
-		// 		Timestamp: now,
-		// 		RideID:    nil,
-		// 	}); err != nil {
-		// 	return fmt.Errorf("failed to publish driver status: %w", err)
-		// }
-
 		return nil
 	}
 

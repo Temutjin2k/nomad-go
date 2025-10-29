@@ -1,5 +1,6 @@
 begin;
 
+SET TIMEZONE = 'Asia/Almaty';
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- User roles enumeration

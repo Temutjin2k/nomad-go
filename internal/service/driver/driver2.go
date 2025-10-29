@@ -114,17 +114,6 @@ func (s *Service) offerRideToDriver(ctx context.Context, correlationID string, d
 			s.l.Error(ctx, "failed to publish driver response", err)
 			return err
 		}
-
-		// // Publish driver status update
-		// if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
-		// 	DriverID:  driver.ID,
-		// 	Status:    types.StatusDriverBusy.String(),
-		// 	Timestamp: time.Now(),
-		// 	RideID:    &offer.RideID,
-		// }); err != nil {
-		// 	s.l.Error(ctx, "failed to publish driver status", err)
-		// 	return err
-		// }
 		return nil
 	}); err != nil {
 		return false, err
@@ -232,7 +221,7 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 }
 
 // HandleRideStatus обрабатывает статусы поездки
-func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpdateMessage) error {
+func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpdateMessage, stopCh chan struct{}) error {
 	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
 		Action: "match_driver",
 		RideID: req.RideID.String(),
@@ -253,7 +242,7 @@ func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpd
 
 	switch req.Status {
 	case types.StatusCancelled.String():
-		if err := s.cancelRide(ctx, *req.DriverID, req.RideID); err != nil {
+		if err := s.cancelRide(ctx, *req.DriverID); err != nil {
 			return wrap.Error(ctx, err)
 		}
 
@@ -268,10 +257,9 @@ func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpd
 		}
 
 		// Track him in a real time
-		ctx, cancel := context.WithCancel(ctx)
 		if err := s.infra.communicator.ListenLocationUpdates(ctx, *req.DriverID, req.RideID,
 			func(ctx context.Context, current models.RideLocationUpdate) error {
-				return s.processDriverLocation(ctx, cancel, current, *finalDest)
+				return s.processDriverLocation(ctx, stopCh, current, *finalDest)
 			}); err != nil {
 			return wrap.Error(ctx, err)
 		}
@@ -282,22 +270,11 @@ func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpd
 	return nil
 }
 
-func (s *Service) cancelRide(ctx context.Context, driverID, rideID uuid.UUID) error {
-	return s.infra.trm.Do(ctx, func(ctx context.Context) error {
-		if _, err := s.repos.driver.ChangeStatus(ctx, driverID, types.StatusDriverAvailable); err != nil {
-			return fmt.Errorf("failed to change driver status to available after ride cancellation: %w", err)
-		}
-
-		// if err := s.infra.publisher.PublishDriverStatus(ctx, models.DriverStatusUpdateMessage{
-		// 	DriverID:  driverID,
-		// 	Status:    types.StatusDriverAvailable.String(),
-		// 	Timestamp: time.Now(),
-		// 	RideID:    &rideID,
-		// }); err != nil {
-		// 	return fmt.Errorf("failed to publish driver status after ride cancellation: %w", err)
-		// }
-		return nil
-	})
+func (s *Service) cancelRide(ctx context.Context, driverID uuid.UUID) error {
+	if _, err := s.repos.driver.ChangeStatus(ctx, driverID, types.StatusDriverAvailable); err != nil {
+		return fmt.Errorf("failed to change driver status to available after ride cancellation: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) processMatchedRide(ctx context.Context, driverID, rideID uuid.UUID) error {
@@ -332,7 +309,7 @@ func (s *Service) processMatchedRide(ctx context.Context, driverID, rideID uuid.
 	})
 }
 
-func (s *Service) processDriverLocation(ctx context.Context, cancel context.CancelFunc, current models.RideLocationUpdate, destination models.Location) error {
+func (s *Service) processDriverLocation(ctx context.Context, cancel chan struct{}, current models.RideLocationUpdate, destination models.Location) error {
 	if _, err := s.UpdateLocation(ctx, current); err != nil {
 		return err
 	}
@@ -341,7 +318,7 @@ func (s *Service) processDriverLocation(ctx context.Context, cancel context.Canc
 		return nil
 	}
 
-	return s.infra.trm.Do(ctx, func(ctx context.Context) error {
+	if err := s.infra.trm.Do(ctx, func(ctx context.Context) error {
 		if _, err := s.repos.driver.ChangeStatus(ctx, current.DriverID, types.DriverStatus(types.StatusArrived)); err != nil {
 			return fmt.Errorf("failed to change driver status: %w", err)
 		}
@@ -356,7 +333,12 @@ func (s *Service) processDriverLocation(ctx context.Context, cancel context.Canc
 			}); err != nil {
 			return fmt.Errorf("failed to publish driver status: %w", err)
 		}
-		cancel()
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	go func() { cancel <- struct{}{} }()
+
+	return nil
 }
