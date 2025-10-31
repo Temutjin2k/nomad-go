@@ -396,3 +396,21 @@ func (r *RideRepo) DriverMatchedForRide(ctx context.Context, rideID, driverID uu
 
 	return nil
 }
+
+// Status gets actual ride status data
+func (r *RideRepo) Status(ctx context.Context, rideID uuid.UUID) (*types.RideStatus, error) {
+	const op = "RideRepo.Status"
+	query := `
+		SELECT status FROM rides 
+		WHERE id =$1;`
+
+	var status types.RideStatus
+	if err := TxorDB(ctx, r.db).QueryRow(ctx, query, rideID).Scan(&status); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, types.ErrRideNotFound
+		}
+		return nil, fmt.Errorf("%s: %v", op, err)
+	}
+
+	return &status, nil
+}

@@ -185,7 +185,7 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 			return authSvc.ErrActionForbidden
 		}
 
-		if ride.Status == types.StatusCompleted.String() || ride.Status == types.StatusCancelled.String() {
+		if !canBeCancelled(ride.Status) {
 			return types.ErrRideCannotBeCancelled
 		}
 
@@ -227,6 +227,17 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 	s.logger.Info(ctx, "ride cancelled successfully")
 
 	return cancelledRide, nil
+}
+
+func canBeCancelled(status string) bool {
+	switch status {
+	case types.StatusRequested.String(),
+		types.StatusMatched.String(),
+		types.StatusEnRoute.String():
+		return true
+	default:
+		return false
+	}
 }
 
 func newCorrelationID() string {

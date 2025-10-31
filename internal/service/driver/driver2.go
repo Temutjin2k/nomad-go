@@ -219,7 +219,7 @@ func (s *Service) waitForDriverAcceptance(ctx context.Context, req models.RideRe
 }
 
 // HandleRideStatus обрабатывает статусы поездки
-func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpdateMessage, stopCh chan struct{}) error {
+func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpdateMessage) error {
 	ctx = wrap.WithLogCtx(ctx, wrap.LogCtx{
 		Action: "match_driver",
 		RideID: req.RideID.String(),
@@ -257,7 +257,7 @@ func (s *Service) HandleRideStatus(ctx context.Context, req models.RideStatusUpd
 		// Track him in a real time
 		if err := s.infra.communicator.ListenLocationUpdates(ctx, *req.DriverID, req.RideID,
 			func(ctx context.Context, current models.RideLocationUpdate) error {
-				return s.processDriverLocation(ctx, stopCh, current, *finalDest)
+				return s.processDriverLocation(ctx, current, *finalDest)
 			}); err != nil {
 			return wrap.Error(ctx, err)
 		}
@@ -284,7 +284,7 @@ func (s *Service) processMatchedRide(ctx context.Context, driverID, rideID uuid.
 		}
 
 		if details.DriverID == nil {
-			return types.ErrRideAlreadyHasDriver
+			return errors.New("driver id not found")
 		}
 		details.DriverID = &driverID
 
@@ -310,9 +310,36 @@ func (s *Service) processMatchedRide(ctx context.Context, driverID, rideID uuid.
 	})
 }
 
-func (s *Service) processDriverLocation(ctx context.Context, cancel chan struct{}, current models.RideLocationUpdate, destination models.Location) error {
+func (s *Service) processDriverLocation(ctx context.Context, current models.RideLocationUpdate, destination models.Location) error {
+	if current.RideID == nil {
+		c, ok := ctx.Value(wrap.LogCtxKey).(wrap.LogCtx)
+
+		// Логируем, что RideID отсутствует
+		s.l.Warn(ctx, "ride_id is nil in current, trying to extract from context")
+
+		if !ok {
+			return errors.New("failed to extract LogCtx from context")
+		}
+
+		if c.RideID == uuid.NilUUID.String() {
+			return errors.New("ride_id is not set at message")
+		}
+
+		convID, _ := uuid.Parse(c.RideID)
+		current.RideID = &convID
+	}
+
 	if _, err := s.UpdateLocation(ctx, current); err != nil {
 		return err
+	}
+
+	status, err := s.repos.ride.Status(ctx, *current.RideID)
+	if err != nil {
+		return fmt.Errorf("failed to get ride status: %w", err)
+	}
+	if *status == types.StatusCancelled {
+		s.l.Error(ctx, "ride has been cancelled", types.ErrRideCancelled)
+		return nil
 	}
 
 	if !s.logic.calculate.IsDriverArrived(current.Location.Latitude, current.Location.Longitude, destination.Latitude, destination.Longitude) {
@@ -338,8 +365,6 @@ func (s *Service) processDriverLocation(ctx context.Context, cancel chan struct{
 	}); err != nil {
 		return err
 	}
-
-	go func() { cancel <- struct{}{} }()
 
 	return nil
 }

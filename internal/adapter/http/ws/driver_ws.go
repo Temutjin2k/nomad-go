@@ -149,6 +149,9 @@ func (h *DriverHub) ListenLocationUpdates(ctx context.Context, driverID, rideID 
 					},
 				},
 			}); err != nil {
+				if err == types.ErrRideCancelled {
+					return nil
+				}
 				errorResponse(conn, err.Error())
 				continue
 			}

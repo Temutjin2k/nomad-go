@@ -62,6 +62,7 @@ type RideRepo interface {
 }
 type RideGetter interface {
 	Get(ctx context.Context, rideID uuid.UUID) (*models.Ride, error)
+	Status(ctx context.Context, rideID uuid.UUID) (*types.RideStatus, error)
 	GetDetails(ctx context.Context, rideID uuid.UUID) (*models.RideDetails, error)
 	GetPickupCoordinate(ctx context.Context, rideID uuid.UUID) (*models.Location, error)
 }
