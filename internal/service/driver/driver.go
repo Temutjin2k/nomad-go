@@ -316,9 +316,9 @@ func (s *Service) StartRide(ctx context.Context, startTime time.Time, driverID, 
 			return fmt.Errorf("failed to get driver data: %w", err)
 		}
 
-		// Ensure driver is EN_ROUTE to pickup location
-		if driver.Status != types.StatusDriverEnRoute {
-			return types.ErrDriverMustBeEnRoute
+		// Ensure driver is ARRIVED before starting ride
+		if driver.Status != types.StatusDriverArrived {
+			return types.ErrDriverMustBeArrived
 		}
 
 		// Get driver last coordinates

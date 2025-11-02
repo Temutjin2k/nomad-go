@@ -132,7 +132,7 @@ func GetCode(err error) int {
 		t.ErrDriverAlreadyOnRide,
 		t.ErrRideDriverMismatch,
 		t.ErrRideNotArrived,
-		t.ErrDriverMustBeEnRoute,
+		t.ErrDriverMustBeArrived,
 		t.ErrRideNotInProgress,
 		t.ErrRideCannotBeCancelled,
 		t.ErrDriverMustBeBusy,

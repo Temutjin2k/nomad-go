@@ -347,7 +347,7 @@ func (s *Service) processDriverLocation(ctx context.Context, current models.Ride
 	}
 
 	if err := s.infra.trm.Do(ctx, func(ctx context.Context) error {
-		if _, err := s.repos.driver.ChangeStatus(ctx, current.DriverID, types.DriverStatus(types.StatusArrived)); err != nil {
+		if _, err := s.repos.driver.ChangeStatus(ctx, current.DriverID, types.StatusDriverArrived); err != nil {
 			return fmt.Errorf("failed to change driver status: %w", err)
 		}
 
@@ -355,7 +355,7 @@ func (s *Service) processDriverLocation(ctx context.Context, current models.Ride
 			ctx,
 			models.DriverStatusUpdateMessage{
 				DriverID:  current.DriverID,
-				Status:    types.StatusArrived.String(),
+				Status:    types.StatusDriverArrived.String(),
 				Timestamp: time.Now(),
 				RideID:    current.RideID,
 			}); err != nil {

@@ -12,7 +12,7 @@ var (
 	ErrDriverAlreadyOnRide       = errors.New("driver is already on a ride")
 	ErrDriverAlreadyBusy         = errors.New("driver already busy")
 	ErrDriverMustBeAvailable     = errors.New("driver must be available")
-	ErrDriverMustBeEnRoute       = errors.New("driver must be en route")
+	ErrDriverMustBeArrived       = errors.New("driver must be arrived")
 	ErrDriverMustBeBusy          = errors.New("driver must be busy")
 	ErrLicenseAlreadyExists      = errors.New("license already exist")
 	ErrInvalidLicenseFormat      = errors.New("invalid license format: AA123123")
