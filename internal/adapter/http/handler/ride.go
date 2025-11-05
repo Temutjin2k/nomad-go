@@ -22,7 +22,7 @@ import (
 type (
 	RideService interface {
 		Create(ctx context.Context, ride *models.Ride) (*models.Ride, error)
-		Cancel(ctx context.Context, rideID uuid.UUID, reason string) (*models.Ride, error)
+		Cancel(ctx context.Context, rideID, passengerID uuid.UUID, reason string) (*models.Ride, error)
 	}
 
 	TokenValidator interface {
@@ -114,6 +114,12 @@ func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
 func (h *Ride) CancelRide(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "cancel_ride")
 
+	user := models.UserFromContext(ctx)
+	if user == nil {
+		errorResponse(w, http.StatusUnauthorized, auth.ErrUnauthorized)
+		return
+	}
+
 	rideIDstr := r.PathValue("ride_id")
 	rideID, err := uuid.Parse(rideIDstr)
 	if err != nil {
@@ -137,7 +143,7 @@ func (h *Ride) CancelRide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cancelledRide, err := h.ride.Cancel(ctx, rideID, request.Reason)
+	cancelledRide, err := h.ride.Cancel(ctx, rideID, user.ID, request.Reason)
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to cancel ride", err)
 		errorResponse(w, GetCode(err), err.Error())

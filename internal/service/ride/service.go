@@ -126,6 +126,17 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 		s.logger.Warn(ctx, "failed to create ride event", "event_type", types.EventRideRequested, "error", err.Error())
 	}
 
+	// cancel message
+	rideRequestedMsg := models.StatusUpdateWebSocketMessage{
+		EventType: types.EventRideRequested,
+		Data:      msg,
+	}
+
+	// notify via websocket
+	if err := s.passengerSender.SendToPassenger(ctx, ride.PassengerID, rideRequestedMsg); err != nil {
+		s.logger.Error(ctx, "failed to notify passenger that ride requested", err)
+	}
+
 	s.logger.Info(ctx, "ride created successfully", "ride_id", createdRide.ID)
 
 	// Wait for driver response for 2 minutes
@@ -139,20 +150,11 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 			s.logger.Error(ctxx, "failed to consume driver response", err)
 
 			// cancel the ride
-			_, err := s.Cancel(ctxx, createdRide.ID, "failed to find a driver")
+			_, err := s.Cancel(ctxx, createdRide.ID, ride.PassengerID, "failed to find a driver")
 			if err != nil {
 				s.logger.Error(ctxx, "failed to cancel ride", err)
 			}
-
-			data := models.StatusUpdateWebSocketMessage{
-				EventType: types.EventRideCancelled,
-				Data:      msg,
-			}
-
-			// notify via websocket
-			if err := s.passengerSender.SendToPassenger(ctxx, createdRide.PassengerID, data); err != nil {
-				s.logger.Error(ctxx, "failed to notify passenger about ride cancelation", err)
-			}
+			return
 		}
 
 		s.logger.Debug(ctx, "finished a gouroutine for waiting driver response")
@@ -162,11 +164,10 @@ func (s *RideService) Create(ctx context.Context, ride *models.Ride) (*models.Ri
 }
 
 // Cancel cancels a ride
-func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason string) (*models.Ride, error) {
+func (s *RideService) Cancel(ctx context.Context, rideID, passengerID uuid.UUID, reason string) (*models.Ride, error) {
 	ctx = wrap.WithAction(wrap.WithRideID(ctx, rideID.String()), "cancel_ride")
 
 	var cancelledRide *models.Ride
-	var msg models.RideStatusUpdateMessage
 	if err := s.trm.Do(ctx, func(ctx context.Context) error {
 		ride, err := s.repo.Get(ctx, rideID)
 		if err != nil {
@@ -177,11 +178,7 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 		}
 
 		// проверяем если юзер хочет отменить именно свою поездку а не чужую
-		user := models.UserFromContext(ctx)
-		if user == nil {
-			return authSvc.ErrInvalidCredentials
-		}
-		if ride.PassengerID != user.ID {
+		if ride.PassengerID != passengerID {
 			return authSvc.ErrActionForbidden
 		}
 
@@ -215,13 +212,25 @@ func (s *RideService) Cancel(ctx context.Context, rideID uuid.UUID, reason strin
 		CorrelationID: wrap.GetRequestID(ctx),
 	}
 
+	// Publish about ride status
 	if err := s.publisher.PublishRideStatus(ctx, message); err != nil {
 		s.logger.Warn(ctx, "failed to publish ride cancelled event", "error", err)
 	}
 
-	eventData, _ := json.Marshal(msg) // non fatal event so just ignore error
+	// Create event
+	eventData, _ := json.Marshal(message) // non fatal event so just ignore error
 	if err := s.eventRepo.CreateEvent(ctx, cancelledRide.ID, types.EventRideCancelled, eventData); err != nil {
 		s.logger.Warn(ctx, "failed to create ride event", "event_type", types.EventRideCancelled, "error", err.Error())
+	}
+
+	// cancel message
+	cancelMsg := models.StatusUpdateWebSocketMessage{
+		EventType: types.EventRideCancelled,
+		Data:      message,
+	}
+	// notify via websocket
+	if err := s.passengerSender.SendToPassenger(ctx, cancelledRide.PassengerID, cancelMsg); err != nil {
+		s.logger.Error(ctx, "failed to notify passenger about ride cancelation", err)
 	}
 
 	s.logger.Info(ctx, "ride cancelled successfully")
