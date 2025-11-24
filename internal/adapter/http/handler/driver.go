@@ -61,6 +61,18 @@ func NewDriver(l logger.Logger, option *DriverServiceOptions) *Driver {
 	}
 }
 
+// Register godoc
+// @Summary      Register a new driver
+// @Description  Register a new driver with vehicle information
+// @Tags         driver
+// @Accept       json
+// @Produce      json
+// @Param        request body dto.RegisterDriverRequest true "Driver registration details"
+// @Success      201 {object} map[string]interface{} "Driver registered successfully"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Router       /drivers [post]
 func (h *Driver) Register(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "register_driver")
 
@@ -100,6 +112,22 @@ func (h *Driver) Register(w http.ResponseWriter, r *http.Request) {
 	h.l.Info(ctx, "driver registered successfully", "driver_id", driver.ID)
 }
 
+// GoOnline godoc
+// @Summary      Driver goes online
+// @Description  Set driver status to online and available for ride requests
+// @Tags         driver
+// @Accept       json
+// @Produce      json
+// @Param        driver_id path string true "Driver ID"
+// @Param        request body dto.CoordinateUpdateReq true "Driver's current location"
+// @Success      200 {object} map[string]interface{} "Driver is now online"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      403 {object} map[string]interface{} "Forbidden"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Security     BearerAuth
+// @Router       /drivers/{driver_id}/online [post]
 func (h *Driver) GoOnline(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "set_driver_online")
 
@@ -160,6 +188,19 @@ func (h *Driver) GoOnline(w http.ResponseWriter, r *http.Request) {
 	h.l.Info(ctx, "driver set to online successfully", "driver_id", driverID)
 }
 
+// GoOffline godoc
+// @Summary      Driver goes offline
+// @Description  Set driver status to offline and get session summary
+// @Tags         driver
+// @Produce      json
+// @Param        driver_id path string true "Driver ID"
+// @Success      200 {object} map[string]interface{} "Driver is now offline with session summary"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      403 {object} map[string]interface{} "Forbidden"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Security     BearerAuth
+// @Router       /drivers/{driver_id}/offline [post]
 func (h *Driver) GoOffline(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "set_driver_offline")
 
@@ -210,6 +251,22 @@ func (h *Driver) GoOffline(w http.ResponseWriter, r *http.Request) {
 	h.l.Info(ctx, "driver set to offline successfully", "driver_id", driverID)
 }
 
+// StartRide godoc
+// @Summary      Start a ride
+// @Description  Driver starts the assigned ride
+// @Tags         driver
+// @Accept       json
+// @Produce      json
+// @Param        driver_id path string true "Driver ID"
+// @Param        request body dto.StartRideReq true "Ride ID and driver location"
+// @Success      200 {object} map[string]interface{} "Ride started successfully"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      403 {object} map[string]interface{} "Forbidden"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Security     BearerAuth
+// @Router       /drivers/{driver_id}/start [post]
 func (h *Driver) StartRide(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "start_ride")
 
@@ -277,6 +334,22 @@ func (h *Driver) StartRide(w http.ResponseWriter, r *http.Request) {
 	h.l.Info(ctx, "ride started successfully", "driver_id", driverID, "ride_id", req.RideID)
 }
 
+// CompleteRide godoc
+// @Summary      Complete a ride
+// @Description  Driver marks the ride as completed with final details
+// @Tags         driver
+// @Accept       json
+// @Produce      json
+// @Param        driver_id path string true "Driver ID"
+// @Param        request body dto.CompleteRideReq true "Ride completion details"
+// @Success      200 {object} map[string]interface{} "Ride completed successfully"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      403 {object} map[string]interface{} "Forbidden"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Security     BearerAuth
+// @Router       /drivers/{driver_id}/complete [post]
 func (h *Driver) CompleteRide(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "complete_ride")
 
@@ -351,6 +424,22 @@ func (h *Driver) CompleteRide(w http.ResponseWriter, r *http.Request) {
 	h.l.Info(ctx, "ride finished successfully", "driver_id", driverID, "ride_id", req.RideID)
 }
 
+// UpdateLocation godoc
+// @Summary      Update driver location
+// @Description  Update driver's current GPS location with additional metadata
+// @Tags         driver
+// @Accept       json
+// @Produce      json
+// @Param        driver_id path string true "Driver ID"
+// @Param        request body dto.UpdateLocationReq true "Location update with coordinates"
+// @Success      200 {object} map[string]interface{} "Location updated successfully"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      403 {object} map[string]interface{} "Forbidden"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Security     BearerAuth
+// @Router       /drivers/{driver_id}/location [post]
 func (h *Driver) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "update_driver_location")
 
@@ -425,6 +514,44 @@ func (h *Driver) UpdateLocation(w http.ResponseWriter, r *http.Request) {
 	h.l.Info(ctx, "driver location has been updated", "driver_id", driverID, "coordinate_id", coordinateID)
 }
 
+// HandleWS godoc
+// @Summary      WebSocket connection for driver updates
+// @Description  Establishes a WebSocket connection for real-time driver notifications and ride assignments. Client must authenticate within 5 seconds: {"type":"auth","token":"Bearer <jwt>"}
+// @Tags         driver
+// @Accept       json
+// @Produce      json
+// @Param        driver_id path string true "Driver ID"
+// @Success      101 {object} map[string]interface{} "Switching Protocols - WebSocket connection established"
+// @Failure      400 {object} map[string]interface{} "Bad request or upgrade failed"
+// @Failure      401 {object} map[string]interface{} "Authentication failed"
+// @Failure      403 {object} map[string]interface{} "Invalid role - must be driver"
+// @Failure      404 {object} map[string]interface{} "Driver not found"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Router       /ws/drivers/{driver_id} [get]
+// @Description  **WebSocket Protocol:**
+// @Description  1. Client connects to ws://host/ws/drivers/{driver_id}
+// @Description  2. Client must send auth message within 5s: `{"type":"auth","token":"Bearer <jwt>"}`
+// @Description  3. Server responds with: `{"type":"auth_ok"}`
+// @Description  4. Server sends heartbeat pings every 60s (client must respond with pong within 30s)
+// @Description  5. Server pushes real-time events:
+// @Description     - Ride assignments: `{"type":"ride_assigned","data":{"ride_id":"..."}}`
+// @Description     - Ride cancellations: `{"type":"ride_cancelled","data":{"ride_id":"..."}}`
+// @Description     - System notifications: `{"type":"notification","data":{...}}`
+// @Description
+// @Description  **Message Types:**
+// @Description  - Client → Server: `{"type":"auth","token":"string"}`
+// @Description  - Server → Client: `{"type":"auth_ok"}` | `{"type":"ride_assigned"}` | `{"type":"ride_cancelled"}` | `{"type":"notification"}` | `{"type":"ping"}`
+// @Description
+// @Description  **Authentication Flow:**
+// @Description  ```json
+// @Description  // 1. Client sends (within 5s):
+// @Description  {"type":"auth","token":"Bearer eyJhbGc..."}
+// @Description
+// @Description  // 2. Server responds:
+// @Description  {"type":"auth_ok"}
+// @Description
+// @Description  // 3. Connection is ready for events
+// @Description  ```
 func (h *Driver) HandleWS(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "handle_driver_ws")
 

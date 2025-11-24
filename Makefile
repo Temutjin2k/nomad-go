@@ -52,3 +52,23 @@ run-auth:
 
 run-ride:
 	go run main.go --mode=ride-service
+
+## Swagger documentation generation
+swagger-install:
+	go install github.com/swaggo/swag/cmd/swag@latest
+
+swagger-ride:
+	swag init --parseDependency --parseInternal --generalInfo docs/swagger_ride.go --output docs/ride --instanceName ride --tags ride
+
+swagger-driver:
+	swag init --parseDependency --parseInternal --generalInfo docs/swagger_driver.go --output docs/driver --instanceName driver --tags driver
+
+swagger-admin:
+	swag init --parseDependency --parseInternal --generalInfo docs/swagger_admin.go --output docs/admin --instanceName admin --tags admin
+
+swagger-auth:
+	swag init --parseDependency --parseInternal --generalInfo docs/swagger_auth.go --output docs/auth --instanceName auth --tags auth
+
+swagger-all: swagger-ride swagger-driver swagger-admin swagger-auth
+	@echo "All Swagger documentation generated successfully"
+

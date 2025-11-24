@@ -1,5 +1,16 @@
 /data/
 
-config.yaml
-
 temp.txt
+# Swagger generated docs
+docs/auth/*.go
+docs/auth/*.json
+docs/auth/*.yaml
+docs/ride/*.go
+docs/ride/*.json
+docs/ride/*.yaml
+docs/driver/*.go
+docs/driver/*.json
+docs/driver/*.yaml
+docs/admin/*.go
+docs/admin/*.json
+docs/admin/*.yaml

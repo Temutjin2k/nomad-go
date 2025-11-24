@@ -58,10 +58,10 @@ services:
       - ./rabbitmq_definitions.json:/etc/rabbitmq/rabbitmq_definitions.json:ro
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && nc -z localhost 5672"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Services
 
@@ -69,7 +69,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ridehail/driver-service:latest
     networks:
       - net
     depends_on:
@@ -86,7 +85,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ridehail/admin-service:latest
     networks:
       - net
     depends_on:
@@ -103,7 +101,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ridehail/auth-service:latest
     networks:
       - net
     depends_on:
@@ -118,7 +115,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ridehail/ride-service:latest
     networks:
       - net
     depends_on:

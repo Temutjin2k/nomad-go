@@ -51,6 +51,21 @@ func NewRide(l logger.Logger, ride RideService, auth TokenValidator, wsConnectio
 	}
 }
 
+// CreateRide godoc
+// @Summary      Create a new ride request
+// @Description  Creates a new ride request for a passenger
+// @Tags         ride
+// @Accept       json
+// @Produce      json
+// @Param        request body dto.CreateRideRequest true "Ride request details"
+// @Success      201 {object} map[string]interface{} "Created ride details"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      403 {object} map[string]interface{} "Forbidden"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Security     BearerAuth
+// @Router       /rides [post]
 func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "create_ride")
 
@@ -111,6 +126,22 @@ func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// CancelRide godoc
+// @Summary      Cancel a ride
+// @Description  Cancel an existing ride request by passenger
+// @Tags         ride
+// @Accept       json
+// @Produce      json
+// @Param        ride_id path string true "Ride ID"
+// @Param        request body dto.CancelRideRequest true "Cancellation reason"
+// @Success      202 {object} map[string]interface{} "Ride cancelled successfully"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      404 {object} map[string]interface{} "Ride not found"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Security     BearerAuth
+// @Router       /rides/{ride_id}/cancel [post]
 func (h *Ride) CancelRide(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "cancel_ride")
 
@@ -164,6 +195,29 @@ func (h *Ride) CancelRide(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleWebSocket godoc
+// @Summary      WebSocket connection for ride updates
+// @Description  Establishes a WebSocket connection for real-time ride updates. Client must send authentication message within 5 seconds: {"type":"auth","token":"Bearer <jwt>"}
+// @Tags         ride
+// @Accept       json
+// @Produce      json
+// @Param        passenger_id path string true "Passenger ID"
+// @Success      101 {object} map[string]interface{} "Switching Protocols - WebSocket connection established"
+// @Failure      400 {object} map[string]interface{} "Bad request or upgrade failed"
+// @Failure      401 {object} map[string]interface{} "Authentication failed"
+// @Failure      403 {object} map[string]interface{} "Invalid role - must be passenger"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Router       /ws/rides/{passenger_id} [get]
+// @Description  **WebSocket Protocol:**
+// @Description  1. Client connects to ws://host/ws/rides/{passenger_id}
+// @Description  2. Client must send auth message within 5s: `{"type":"auth","token":"Bearer <jwt>"}`
+// @Description  3. Server responds with: `{"type":"auth_ok"}`
+// @Description  4. Server sends heartbeat pings every 60s (respond with pong within 30s)
+// @Description  5. Server pushes ride updates: `{"type":"ride_update","data":{...}}`
+// @Description
+// @Description  **Message Types:**
+// @Description  - Client → Server: `{"type":"auth","token":"string"}`
+// @Description  - Server → Client: `{"type":"auth_ok"}` | `{"type":"ride_update","data":{}}` | `{"type":"ping"}`
 func (h *Ride) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	passengerIdStr := r.PathValue("passenger_id")
 

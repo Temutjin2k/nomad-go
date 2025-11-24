@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	httpSwagger "github.com/swaggo/http-swagger"
+
 	"github.com/Temutjin2k/ride-hail-system/config"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/middleware"
@@ -89,8 +91,32 @@ func New(
 	}
 
 	api.setupRoutes()
+	api.setupSwaggerRoutes()
 
 	return api, nil
+}
+
+// setupSwaggerRoutes configures Swagger UI endpoints based on service mode
+func (a *API) setupSwaggerRoutes() {
+	var instanceName string
+
+	switch a.mode {
+	case types.RideService:
+		instanceName = "ride"
+	case types.DriverAndLocationService:
+		instanceName = "driver"
+	case types.AdminService:
+		instanceName = "admin"
+	case types.AuthService:
+		instanceName = "auth"
+	default:
+		a.log.Warn(context.Background(), "unknown service mode for swagger setup", "mode", a.mode)
+		return
+	}
+
+	// Swagger UI endpoint
+	swaggerURL := httpSwagger.InstanceName(instanceName)
+	a.mux.HandleFunc("/swagger/", httpSwagger.Handler(swaggerURL))
 }
 
 func (a *API) Stop(ctx context.Context) error {

@@ -27,6 +27,17 @@ func NewAdmin(s AdminService, l logger.Logger) *Admin {
 	}
 }
 
+// GetOverview godoc
+// @Summary      Get system overview
+// @Description  Get system metrics and statistics overview
+// @Tags         admin
+// @Produce      json
+// @Success      200 {object} models.OverviewResponse "System overview data"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      403 {object} map[string]interface{} "Forbidden - Admin only"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Security     BearerAuth
+// @Router       /admin/overview [get]
 func (h *Admin) GetOverview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = wrap.WithAction(ctx, "admin_get_overview")
@@ -48,6 +59,22 @@ func (h *Admin) GetOverview(w http.ResponseWriter, r *http.Request) {
 
 var activeRidesSortSafeList = []string{"ride_number", "started_at", "estimated_completion", "created_at", "-ride_number", "-started_at", "-estimated_completion", "-created_at"}
 
+// GetActiveRides godoc
+// @Summary      Get active rides
+// @Description  Get list of all currently active rides with pagination and filtering
+// @Tags         admin
+// @Produce      json
+// @Param        page query int false "Page number" default(1)
+// @Param        page_size query int false "Page size" default(20)
+// @Param        sort query string false "Sort field" default(created_at)
+// @Success      200 {object} models.ActiveRidesResponse "List of active rides"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      403 {object} map[string]interface{} "Forbidden - Admin only"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Security     BearerAuth
+// @Router       /admin/rides/active [get]
 func (h *Admin) GetActiveRides(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = wrap.WithAction(ctx, "admin_get_active_rides")

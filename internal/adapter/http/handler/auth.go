@@ -31,6 +31,18 @@ func NewAuth(service AuthService, l logger.Logger) *Auth {
 	}
 }
 
+// Register godoc
+// @Summary      Register a new user
+// @Description  Register a new user account (driver or passenger)
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body dto.RegisterUserRequest true "User registration details"
+// @Success      201 {object} map[string]interface{} "User ID"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Router       /auth/register [post]
 func (h *Auth) Register(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "register_user")
 
@@ -63,6 +75,19 @@ func (h *Auth) Register(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Login godoc
+// @Summary      User login
+// @Description  Authenticate user and receive JWT tokens
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body dto.LoginRequest true "Login credentials"
+// @Success      200 {object} map[string]interface{} "Access and refresh tokens"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Router       /auth/login [post]
 func (h *Auth) Login(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "login_user")
 
@@ -97,6 +122,19 @@ func (h *Auth) Login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Refresh godoc
+// @Summary      Refresh access token
+// @Description  Get a new access token using refresh token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body dto.RefreshTokenRequest true "Refresh token"
+// @Success      200 {object} map[string]interface{} "New access and refresh tokens"
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Invalid refresh token"
+// @Failure      422 {object} map[string]interface{} "Validation error"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Router       /auth/refresh [post]
 func (h *Auth) Refresh(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "refresh_token")
 
@@ -131,6 +169,17 @@ func (h *Auth) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Profile godoc
+// @Summary      Get user profile
+// @Description  Get current authenticated user's profile information
+// @Tags         auth
+// @Produce      json
+// @Success      200 {object} map[string]interface{} "User profile"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      404 {object} map[string]interface{} "Profile not found"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Security     BearerAuth
+// @Router       /auth/me [get]
 func (h *Auth) Profile(w http.ResponseWriter, r *http.Request) {
 	ctx := wrap.WithAction(r.Context(), "get_profile")
 
