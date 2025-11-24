@@ -30,10 +30,10 @@ jobs:
     
     - name: Generate Swagger docs
       run: |
-        swag init --generalInfo cmd/ride/main.go --output docs/ride
-        swag init --generalInfo cmd/driver/main.go --output docs/driver
-        swag init --generalInfo internal/adapter/http/handler/auth.go --output docs/auth
-        swag init --generalInfo internal/adapter/http/handler/admin.go --output docs/admin
+        swag init --parseDependency --parseInternal --generalInfo docs/swagger_ride.go --output docs/ride --instanceName ride --tags ride
+        swag init --parseDependency --parseInternal --generalInfo docs/swagger_driver.go --output docs/driver --instanceName driver --tags driver
+        swag init --parseDependency --parseInternal --generalInfo docs/swagger_admin.go --output docs/admin --instanceName admin --tags admin
+        swag init --parseDependency --parseInternal --generalInfo docs/swagger_auth.go --output docs/auth --instanceName auth --tags auth
     
     - name: Run gofumpt
       run: gofumpt -l -w .
