@@ -1,6 +1,6 @@
 # Database Configuration
 database:
-  host: ${DB_HOST:-localhost}
+  host: ${DB_HOST:-postgresql}
   port: ${DB_PORT:-5432}
   user: ${DB_USER:-ridehail_user}
   password: ${DB_PASSWORD:-ridehail_pass}
@@ -8,7 +8,7 @@ database:
 
 # RabbitMQ Configuration
 rabbitmq:
-  host: ${RABBITMQ_HOST:-localhost}
+  host: ${RABBITMQ_HOST:-rabbitmq}
   port: ${RABBITMQ_PORT:-5672}
   user: ${RABBITMQ_USER:-admin}
   password: ${RABBITMQ_PASSWORD:-admin}

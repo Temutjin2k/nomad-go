@@ -21,7 +21,7 @@ services:
       POSTGRES_USER: ridehail_user
       POSTGRES_PASSWORD: ridehail_pass
       POSTGRES_DB: ridehail_db
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ridehail_user -d ridehail_db"]
       interval: 10s
@@ -56,9 +56,77 @@ services:
       - ./data/rabbitmq:/var/lib/rabbitmq
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq_definitions.json:/etc/rabbitmq/rabbitmq_definitions.json:ro
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && nc -z localhost 5672"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Services
+
+  driver-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ridehail/driver-service:latest
+    networks:
+      - net
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: ["./main", "--mode=driver-service"]
+    ports:
+      - "3001:3001"  
+    restart: unless-stopped
+
+  admin-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ridehail/admin-service:latest
+    networks:
+      - net
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: ["./main", "--mode=admin-service"]
+    ports:
+      - "3004:3004"
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ridehail/auth-service:latest
+    networks:
+      - net
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    command: ["./main", "--mode=auth-service"]
+    ports:
+      - "3005:3005"
+    restart: unless-stopped
+
+  ride-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ridehail/ride-service:latest
+    networks:
+      - net
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    command: ["./main", "--mode=ride-service"]
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
