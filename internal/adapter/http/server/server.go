@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 
 	"github.com/Temutjin2k/ride-hail-system/config"
@@ -92,6 +93,7 @@ func New(
 
 	api.setupRoutes()
 	api.setupSwaggerRoutes()
+	api.setupMetricsRoute()
 
 	return api, nil
 }
@@ -117,6 +119,11 @@ func (a *API) setupSwaggerRoutes() {
 	// Swagger UI endpoint
 	swaggerURL := httpSwagger.InstanceName(instanceName)
 	a.mux.HandleFunc("/swagger/", httpSwagger.Handler(swaggerURL))
+}
+
+// setupMetricsRoute configures the Prometheus metrics endpoint
+func (a *API) setupMetricsRoute() {
+	a.mux.Handle("/metrics", promhttp.Handler())
 }
 
 func (a *API) Stop(ctx context.Context) error {
@@ -146,5 +153,13 @@ func (a *API) Run(ctx context.Context, errCh chan<- error) {
 
 // withMiddleware applies middlewares to the mux
 func (a *API) withMiddleware() http.Handler {
-	return a.m.RequestID(a.m.Auth(a.mux))
+	serviceName := string(a.mode)
+
+	// Chain middlewares: RequestID -> Metrics -> Auth -> mux
+	var handler http.Handler = a.mux
+	handler = a.m.Auth(handler)
+	handler = a.m.Metrics(serviceName)(handler)
+	handler = a.m.RequestID(handler)
+
+	return handler
 }

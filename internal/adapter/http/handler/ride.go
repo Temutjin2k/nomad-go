@@ -13,6 +13,7 @@ import (
 	"github.com/Temutjin2k/ride-hail-system/internal/service/auth"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
+	"github.com/Temutjin2k/ride-hail-system/pkg/metrics"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
 	wshub "github.com/Temutjin2k/ride-hail-system/pkg/wsHub"
@@ -107,9 +108,13 @@ func (h *Ride) CreateRide(w http.ResponseWriter, r *http.Request) {
 	createdRide, err := h.ride.Create(ctx, domainModel)
 	if err != nil {
 		h.l.Error(wrap.ErrorCtx(ctx, err), "failed to create ride", err)
+		metrics.RidesTotal.WithLabelValues("ride_service", "failed").Inc()
 		errorResponse(w, GetCode(err), err.Error())
 		return
 	}
+
+	// Track successful ride creation
+	metrics.RidesTotal.WithLabelValues("ride_service", "created").Inc()
 
 	response := envelope{
 		"ride_id":                    createdRide.ID,
@@ -262,7 +267,11 @@ func (h *Ride) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		wsConn.Close()
 		return
 	}
-	defer h.wsConnections.Delete(passenger.ID)
+	metrics.WebSocketConnectionsGauge.WithLabelValues("ride_service").Inc()
+	defer func() {
+		h.wsConnections.Delete(passenger.ID)
+		metrics.WebSocketConnectionsGauge.WithLabelValues("ride_service").Dec()
+	}()
 
 	h.l.Info(ctx, "websocket connection registered")
 	// Heartbeat

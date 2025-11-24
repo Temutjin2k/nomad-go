@@ -14,3 +14,6 @@ docs/driver/*.yaml
 docs/admin/*.go
 docs/admin/*.json
 docs/admin/*.yaml
+
+# Observability data
+observability/grafana/data/

@@ -14,6 +14,7 @@ import (
 	drivergo "github.com/Temutjin2k/ride-hail-system/internal/service/driver"
 	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
+	"github.com/Temutjin2k/ride-hail-system/pkg/metrics"
 	"github.com/Temutjin2k/ride-hail-system/pkg/uuid"
 	"github.com/Temutjin2k/ride-hail-system/pkg/validator"
 	wshub "github.com/Temutjin2k/ride-hail-system/pkg/wsHub"
@@ -173,6 +174,9 @@ func (h *Driver) GoOnline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Track driver going online
+	metrics.DriversOnlineGauge.WithLabelValues("driver_service").Inc()
+
 	response := envelope{
 		"status":     "AVAILABLE",
 		"message":    "You are now online and ready to accept rides",
@@ -230,6 +234,9 @@ func (h *Driver) GoOffline(w http.ResponseWriter, r *http.Request) {
 		errorResponse(w, GetCode(err), err.Error())
 		return
 	}
+
+	// Track driver going offline
+	metrics.DriversOnlineGauge.WithLabelValues("driver_service").Dec()
 
 	response := envelope{
 		"status":     "OFFLINE",
@@ -609,7 +616,11 @@ func (h *Driver) HandleWS(w http.ResponseWriter, r *http.Request) {
 		wsConn.Close()
 		return
 	}
-	defer h.wsConnections.Delete(driver.ID)
+	metrics.WebSocketConnectionsGauge.WithLabelValues("driver_service").Inc()
+	defer func() {
+		h.wsConnections.Delete(driver.ID)
+		metrics.WebSocketConnectionsGauge.WithLabelValues("driver_service").Dec()
+	}()
 
 	h.l.Info(ctx, "websocket connection registered")
 
