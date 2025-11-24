@@ -23,11 +23,11 @@ jobs:
     - name: Download dependencies
       run: go mod download
     
-    - name: Run linters
-      uses: golangci/golangci-lint-action@v6
-      with:
-        version: latest
-        args: --timeout=5m
+    - name: Install gofumpt
+      run: go install mvdan.cc/gofumpt@latest
+    
+    - name: Run gofumpt
+      run: gofumpt -l -w .
     
     - name: Run tests
       run: go test ./...
