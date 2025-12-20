@@ -7,9 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	httpSwagger "github.com/swaggo/http-swagger"
-
 	"github.com/Temutjin2k/ride-hail-system/config"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/handler"
 	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/middleware"
@@ -18,26 +15,21 @@ import (
 	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
 )
 
-const serverIPAddress = "%s:%s"
+type (
+	API struct {
+		server *http.Server
+		log    logger.Logger
+	}
 
-type API struct {
-	mode   types.ServiceMode
-	mux    *http.ServeMux
-	server *http.Server
-	routes *handlers // routes/handlers
-	m      *middleware.Middleware
+	handlers struct {
+		ride   *handler.Ride
+		driver *handler.Driver
+		admin  *handler.Admin
+		auth   *handler.Auth
 
-	addr string
-	cfg  config.Config
-	log  logger.Logger
-}
-
-type handlers struct {
-	ride   *handler.Ride
-	driver *handler.Driver
-	admin  *handler.Admin
-	auth   *handler.Auth
-}
+		health *handler.Health
+	}
+)
 
 func New(
 	ctx context.Context,
@@ -49,81 +41,33 @@ func New(
 	wshub handler.ConnectionHub,
 	logger logger.Logger,
 ) (*API, error) {
-	var addr string
-	handlers := &handlers{}
-
 	if authService == nil {
 		return nil, errors.New("auth service is required")
 	}
 
-	switch cfg.Mode {
-	case types.RideService:
-		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.RideService)
-		handlers.ride = handler.NewRide(logger, rideService, authService, wshub)
-	case types.DriverAndLocationService:
-		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.DriverLocationService)
-		handlers.driver = handler.NewDriver(logger, driverService)
-	case types.AdminService:
-		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.AdminService)
-		handlers.admin = handler.NewAdmin(adminService, logger)
-	case types.AuthService:
-		addr = fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.AuthService)
-		handlers.auth = handler.NewAuth(authService, logger)
-	default:
-		return nil, fmt.Errorf("invalid mode: %s", cfg.Mode)
-	}
+	handlers := newHandlers(cfg,
+		driverService,
+		rideService,
+		adminService,
+		authService,
+		wshub,
+		logger,
+	)
 
-	mid := middleware.NewMiddleware(authService, logger)
+	mux := http.NewServeMux()
+	m := middleware.NewMiddleware(authService, logger)
+
+	setupRoutes(mux, handlers, m, cfg.Mode, logger)
 
 	api := &API{
-		mode: cfg.Mode,
-
-		mux:    http.NewServeMux(),
-		routes: handlers,
-		m:      mid,
-		addr:   addr,
-		cfg:    cfg,
-		log:    logger,
+		server: &http.Server{
+			Addr:    serverAddress(cfg),
+			Handler: withMiddleware(mux, m, cfg.Mode),
+		},
+		log: logger,
 	}
-
-	api.server = &http.Server{
-		Addr:    api.addr,
-		Handler: api.mux,
-	}
-
-	api.setupRoutes()
-	api.setupSwaggerRoutes()
-	api.setupMetricsRoute()
 
 	return api, nil
-}
-
-// setupSwaggerRoutes configures Swagger UI endpoints based on service mode
-func (a *API) setupSwaggerRoutes() {
-	var instanceName string
-
-	switch a.mode {
-	case types.RideService:
-		instanceName = "ride"
-	case types.DriverAndLocationService:
-		instanceName = "driver"
-	case types.AdminService:
-		instanceName = "admin"
-	case types.AuthService:
-		instanceName = "auth"
-	default:
-		a.log.Warn(context.Background(), "unknown service mode for swagger setup", "mode", a.mode)
-		return
-	}
-
-	// Swagger UI endpoint
-	swaggerURL := httpSwagger.InstanceName(instanceName)
-	a.mux.HandleFunc("/swagger/", httpSwagger.Handler(swaggerURL))
-}
-
-// setupMetricsRoute configures the Prometheus metrics endpoint
-func (a *API) setupMetricsRoute() {
-	a.mux.Handle("/metrics", promhttp.Handler())
 }
 
 func (a *API) Stop(ctx context.Context) error {
@@ -131,7 +75,7 @@ func (a *API) Stop(ctx context.Context) error {
 	defer cancel()
 	ctx = wrap.WithAction(ctx, "http_server_stop")
 
-	a.log.Debug(ctx, "shutting down HTTP server...", "address", a.addr)
+	a.log.Debug(ctx, "shutting down HTTP server...", "address", a.server.Addr)
 	if err := a.server.Shutdown(ctx); err != nil {
 		return fmt.Errorf("error shutting down server: %w", err)
 	}
@@ -143,8 +87,8 @@ func (a *API) Stop(ctx context.Context) error {
 func (a *API) Run(ctx context.Context, errCh chan<- error) {
 	go func() {
 		ctx = wrap.WithAction(ctx, "http_server_start")
-		a.log.Info(ctx, "started http server", "address", a.addr)
-		if err := http.ListenAndServe(a.addr, a.withMiddleware()); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		a.log.Info(ctx, "started http server", "address", a.server.Addr)
+		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("failed to start HTTP server: %w", err)
 			return
 		}
@@ -152,14 +96,48 @@ func (a *API) Run(ctx context.Context, errCh chan<- error) {
 }
 
 // withMiddleware applies middlewares to the mux
-func (a *API) withMiddleware() http.Handler {
-	serviceName := string(a.mode)
+func withMiddleware(mux *http.ServeMux, m *middleware.Middleware, mode types.ServiceMode) http.Handler {
+	serviceName := mode.String()
 
-	// Chain middlewares: RequestID -> Metrics -> Auth -> mux
-	var handler http.Handler = a.mux
-	handler = a.m.Auth(handler)
-	handler = a.m.Metrics(serviceName)(handler)
-	handler = a.m.RequestID(handler)
+	var handler http.Handler = mux
+	handler = m.Auth(handler)
+	handler = m.Metrics(serviceName)(handler)
+	handler = m.RequestID(handler)
+	handler = m.Recover(handler)
 
 	return handler
+}
+
+func serverAddress(cfg config.Config) string {
+	serverIPAddress := "%s:%s"
+	switch cfg.Mode {
+	case types.RideService:
+		return fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.RideService)
+	case types.DriverAndLocationService:
+		return fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.DriverLocationService)
+	case types.AdminService:
+		return fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.AdminService)
+	case types.AuthService:
+		return fmt.Sprintf(serverIPAddress, "0.0.0.0", cfg.Services.AuthService)
+	}
+
+	return ""
+}
+
+func newHandlers(
+	cfg config.Config,
+	driverService *handler.DriverServiceOptions,
+	rideService handler.RideService,
+	adminService handler.AdminService,
+	authService handler.AuthService,
+	wshub handler.ConnectionHub,
+	logger logger.Logger,
+) *handlers {
+	return &handlers{
+		ride:   handler.NewRide(rideService, authService, wshub, logger),
+		driver: handler.NewDriver(driverService, logger),
+		admin:  handler.NewAdmin(adminService, logger),
+		auth:   handler.NewAuth(authService, logger),
+		health: handler.NewHealth(cfg.Mode.String(), logger),
+	}
 }

@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"bufio"
+	"net"
 	"net/http"
 	"time"
 
@@ -10,6 +12,17 @@ import (
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode int
+}
+
+// Hijack allows the responseWriter to implement the http.Hijacker interface
+// It was a problem when using WebSockets with the metrics middleware in gorrilla/websocket
+// because the websocket.Upgrader requires the ResponseWriter to implement http.Hijacker.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	return h.Hijack()
 }
 
 func (rw *responseWriter) WriteHeader(code int) {

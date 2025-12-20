@@ -53,7 +53,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func NewDriver(l logger.Logger, option *DriverServiceOptions) *Driver {
+func NewDriver(option *DriverServiceOptions, l logger.Logger) *Driver {
 	return &Driver{
 		service:       option.Service,
 		wsConnections: option.WsConnections,

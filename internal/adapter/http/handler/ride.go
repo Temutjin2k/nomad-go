@@ -43,12 +43,12 @@ type (
 	}
 )
 
-func NewRide(l logger.Logger, ride RideService, auth TokenValidator, wsConnections ConnectionHub) *Ride {
+func NewRide(ride RideService, auth TokenValidator, wsConnections ConnectionHub, l logger.Logger) *Ride {
 	return &Ride{
-		l:             l,
 		ride:          ride,
 		auth:          auth,
 		wsConnections: wsConnections,
+		l:             l,
 	}
 }
 

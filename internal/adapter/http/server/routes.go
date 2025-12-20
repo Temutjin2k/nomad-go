@@ -1,72 +1,92 @@
 package server
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 
+	"github.com/Temutjin2k/ride-hail-system/internal/adapter/http/middleware"
 	"github.com/Temutjin2k/ride-hail-system/internal/domain/types"
+	"github.com/Temutjin2k/ride-hail-system/pkg/logger"
+	wrap "github.com/Temutjin2k/ride-hail-system/pkg/logger/wrapper"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // setupRoutes - setups http routes
-func (a *API) setupRoutes() {
+func setupRoutes(mux *http.ServeMux, routes *handlers, m *middleware.Middleware, mode types.ServiceMode, log logger.Logger) {
 	// System Health
-	a.mux.HandleFunc("/health", a.HealthCheck)
+	mux.HandleFunc("/health", routes.health.HealthCheck)
 
-	switch a.mode {
+	setupSwaggerRoutes(mux, mode, log)
+	setupMetricsRoute(mux)
+
+	switch mode {
 	case types.AdminService:
-		a.setupAdminRoutes()
+		setupAdminRoutes(mux, routes, m)
 	case types.RideService:
-		a.setupRideRoutes()
+		setupRideRoutes(mux, routes, m)
 	case types.DriverAndLocationService:
-		a.setupDriverAndLocationRoutes()
+		setupDriverAndLocationRoutes(mux, routes, m)
 	case types.AuthService:
-		a.SetupAuthRoutes()
+		setupAuthRoutes(mux, routes)
 	}
 }
 
 // setupAdminRoutes setups routes for admin service
-func (a *API) setupAdminRoutes() {
-	a.mux.Handle("GET /admin/overview", a.m.RequireRoles(a.routes.admin.GetOverview, types.RoleAdmin))        // Get system metrics overview
-	a.mux.Handle("GET /admin/rides/active", a.m.RequireRoles(a.routes.admin.GetActiveRides, types.RoleAdmin)) // Get list of active rides
+func setupAdminRoutes(mux *http.ServeMux, routes *handlers, m *middleware.Middleware) {
+	mux.Handle("GET /admin/overview", m.RequireRoles(routes.admin.GetOverview, types.RoleAdmin))        // Get system metrics overview
+	mux.Handle("GET /admin/rides/active", m.RequireRoles(routes.admin.GetActiveRides, types.RoleAdmin)) // Get list of active rides
 }
 
 // setupRideRoutes setups routes for ride service
-func (a *API) setupRideRoutes() {
-	a.mux.Handle("POST /rides", a.m.RequireRoles(a.routes.ride.CreateRide, types.RolePassenger))                  // Create a new ride request
-	a.mux.Handle("POST /rides/{ride_id}/cancel", a.m.RequireRoles(a.routes.ride.CancelRide, types.RolePassenger)) // Cancel a ride
-	a.mux.HandleFunc("GET /ws/passengers/{passenger_id}", a.routes.ride.HandleWebSocket)                          // WebSocket connection for passengers
+func setupRideRoutes(mux *http.ServeMux, routes *handlers, m *middleware.Middleware) {
+	mux.Handle("POST /rides", m.RequireRoles(routes.ride.CreateRide, types.RolePassenger))                  // Create a new ride request
+	mux.Handle("POST /rides/{ride_id}/cancel", m.RequireRoles(routes.ride.CancelRide, types.RolePassenger)) // Cancel a ride
+	mux.HandleFunc("GET /ws/passengers/{passenger_id}", routes.ride.HandleWebSocket)                        // WebSocket connection for passengers
 }
 
 // setupDriverAndLocationRoutes setups routes for driver and location service
-func (a *API) setupDriverAndLocationRoutes() {
-	a.mux.HandleFunc("POST /drivers", a.routes.driver.Register)
-	a.mux.Handle("POST /drivers/{driver_id}/online", a.m.RequireRoles(a.routes.driver.GoOnline, types.RoleDriver))         // Driver goes online
-	a.mux.Handle("POST /drivers/{driver_id}/offline", a.m.RequireRoles(a.routes.driver.GoOffline, types.RoleDriver))       // Driver goes offline
-	a.mux.Handle("POST /drivers/{driver_id}/location", a.m.RequireRoles(a.routes.driver.UpdateLocation, types.RoleDriver)) // Update driver location
-	a.mux.Handle("POST /drivers/{driver_id}/start", a.m.RequireRoles(a.routes.driver.StartRide, types.RoleDriver))         // Start a ride
-	a.mux.Handle("POST /drivers/{driver_id}/complete", a.m.RequireRoles(a.routes.driver.CompleteRide, types.RoleDriver))   // Complete a ride
-	a.mux.HandleFunc("GET /ws/drivers/{driver_id}", a.routes.driver.HandleWS)                                              // WebSocket connection for drivers
+func setupDriverAndLocationRoutes(mux *http.ServeMux, routes *handlers, m *middleware.Middleware) {
+	mux.HandleFunc("POST /drivers", routes.driver.Register)
+	mux.Handle("POST /drivers/{driver_id}/online", m.RequireRoles(routes.driver.GoOnline, types.RoleDriver))         // Driver goes online
+	mux.Handle("POST /drivers/{driver_id}/offline", m.RequireRoles(routes.driver.GoOffline, types.RoleDriver))       // Driver goes offline
+	mux.Handle("POST /drivers/{driver_id}/location", m.RequireRoles(routes.driver.UpdateLocation, types.RoleDriver)) // Update driver location
+	mux.Handle("POST /drivers/{driver_id}/start", m.RequireRoles(routes.driver.StartRide, types.RoleDriver))         // Start a ride
+	mux.Handle("POST /drivers/{driver_id}/complete", m.RequireRoles(routes.driver.CompleteRide, types.RoleDriver))   // Complete a ride
+	mux.HandleFunc("GET /ws/drivers/{driver_id}", routes.driver.HandleWS)                                            // WebSocket connection for drivers
 }
 
-func (a *API) SetupAuthRoutes() {
-	a.mux.HandleFunc("POST /auth/register", a.routes.auth.Register)
-	a.mux.HandleFunc("POST /auth/login", a.routes.auth.Login)
-	a.mux.HandleFunc("POST /auth/refresh", a.routes.auth.Refresh)
-	a.mux.HandleFunc("GET /auth/me", a.routes.auth.Profile)
+func setupAuthRoutes(mux *http.ServeMux, routes *handlers) {
+	mux.HandleFunc("POST /auth/register", routes.auth.Register)
+	mux.HandleFunc("POST /auth/login", routes.auth.Login)
+	mux.HandleFunc("POST /auth/refresh", routes.auth.Refresh)
+	mux.HandleFunc("GET /auth/me", routes.auth.Profile)
 }
 
-// HealthCheck - returns system information.
-func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	response := map[string]any{
-		"status": "available",
-		"system_info": map[string]string{
-			"address": a.addr,
-		},
-	}
+// setupSwaggerRoutes configures Swagger UI endpoints based on service mode
+func setupSwaggerRoutes(mux *http.ServeMux, mode types.ServiceMode, log logger.Logger) {
+	var instanceName string
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		a.log.Error(r.Context(), "healthcheck", err)
+	switch mode {
+	case types.RideService:
+		instanceName = "ride"
+	case types.DriverAndLocationService:
+		instanceName = "driver"
+	case types.AdminService:
+		instanceName = "admin"
+	case types.AuthService:
+		instanceName = "auth"
+	default:
+		log.Warn(wrap.WithAction(context.Background(), "setup swagger routes"), "unknown service mode for swagger setup", "mode", mode)
 		return
 	}
+
+	// Swagger UI endpoint
+	swaggerURL := httpSwagger.InstanceName(instanceName)
+	mux.HandleFunc("/swagger/", httpSwagger.Handler(swaggerURL))
+}
+
+// setupMetricsRoute configures the Prometheus metrics endpoint
+func setupMetricsRoute(mux *http.ServeMux) {
+	mux.Handle("/metrics", promhttp.Handler())
 }

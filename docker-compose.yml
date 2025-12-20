@@ -11,6 +11,20 @@ volumes:
   loki_data:
 
 services: 
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - net
+    depends_on:
+      - auth-service
+      - ride-service
+      - driver-service
+      - admin-service
+
   postgresql:
     image: postgis/postgis:16-3.4
     hostname: postgresql
